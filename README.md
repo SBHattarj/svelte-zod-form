@@ -1,4 +1,4 @@
-# create-svelte
+# svelte-zod-form
 
 A zod typed form for svelte.
 
@@ -46,3 +46,5 @@ All input having same path defined through form sections and same name will be s
 No inputs having path that is not in the schema will not be handled by the form.
 
 More work maybe needed. Help will be appreciated.
+
+Also it seems the animation added on the error slot persists even when it is showed in the form, which is interesting as I am copying over only the html.
