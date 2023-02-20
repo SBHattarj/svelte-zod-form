@@ -94,7 +94,6 @@ function validation(node) {
     let Jparent = Jelement.parent("[data-form-section-container]");
     if (Jparent.length < 1) {
       Jparent = Jelement.wrap(`<div data-form-section-container></div>`).parent("[data-form-section-container]");
-      console.log("parent added", Jparent.html());
     }
     let errorIndex = errors.findIndex(
       (error2) => truePath.length === error2.path.length && error2.path.every((key, index) => truePath[index] === key)
@@ -162,7 +161,6 @@ function validation(node) {
         []
       );
       errorSet.forEach(({ path, issues, name }) => {
-        console.log(path);
         throwError(name, path, new z.ZodError(issues));
       });
       return;
@@ -180,7 +178,7 @@ function validation(node) {
       setInputPath([...path, name], input);
     }
     Jnode.on("input", inputSelector, (e) => {
-      Jnode.find(inputSelector).parent("[data-form-section-container]").find("[data-form-error]").empty();
+      Jnode.find(inputSelector).parent("[data-form-section-container]").find("> [data-form-error], *:not([data-form-section]) [data-form-error]").empty();
       let inputValue = e.target.valueAsNumber ?? e.target.valueAsDate ?? e.target.value;
       if (!e.target.dispatchEvent(
         new CustomEvent(
