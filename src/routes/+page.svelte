@@ -19,12 +19,21 @@
     })
 })} let:validation let:formSection let:formSectionContainer let:formError let:formInput>
     <form use:validation>
-        <input type="number" name="a">
+        a<input type="number" name="a">
         <div use:formSection={{name: "b"}}>
             <div use:formSectionContainer>
                 <div use:formError></div>
-                <input type="number" name="c" use:formInput>
+                b<input type="number" name="c" use:formInput>
             </div>
         </div>
     </form>
+    <div slot="error" let:error>
+        <h2>Errors: </h2>
+        <ul>
+
+            {#each error.errors as message}
+                <li>{message}</li>
+            {/each}
+        </ul>
+    </div>
 </Form>

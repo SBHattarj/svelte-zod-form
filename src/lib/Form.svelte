@@ -127,7 +127,6 @@
 
             if(Jparent.length < 1) {
                 Jparent = Jelement.wrap(`<div data-form-section-container></div>`).parent("[data-form-section-container]")
-                console.log("parent added", Jparent.html())
             }
 
             let errorIndex = errors.findIndex(
@@ -206,7 +205,6 @@
                 [] as {issues: z.ZodIssue[], path: (string | number)[], name: string}[])
 
                 errorSet.forEach(({path, issues, name}) => {
-                    console.log(path)
                     throwError(name, path as string[], new z.ZodError(issues))
                 })
                 return
@@ -229,7 +227,7 @@
             Jnode.on("input", inputSelector, e => {
                 Jnode.find(inputSelector)
                     .parent("[data-form-section-container]")
-                    .find("[data-form-error]")
+                    .find("> [data-form-error], *:not([data-form-section]) [data-form-error]")
                     .empty()
 
                 let inputValue = e.target.valueAsNumber ?? e.target.valueAsDate ?? e.target.value
