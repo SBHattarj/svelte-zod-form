@@ -1,9 +1,13 @@
+<script context="module">
+    export const Value = Symbol("Value")
+</script>
 <script lang="ts">
+    import { tick } from "svelte";
+
 	import type { ValidateDataEvent, ValidateValueEvent, ValueTransformEvent } from './Form';
     import type { ActionReturn } from "svelte/action";
     import J from "jquery"
 	import { z, type ZodObject, type ZodRawShape, type ZodTypeAny } from 'zod';
-
 
     type T = $$Generic<ZodObject<ZodRawShape>>
     export let schema: T
@@ -11,9 +15,30 @@
 
     export let realTime: boolean = false
 
+    type namesType<T> = {
+        [key in keyof T]: (T[key] extends number | string | boolean ? {} : namesType<T[key]>) & { [Value]: string }
+    }
+    function createNamesProxy(name: string): namesType<z.infer<T>> {
+        return new Proxy(
+            new String(name),
+            {
+                get(target, key) {
+                    if(key === Value) {
+                        return target.toString()
+                    }
+                    if(target.toString() == "") {
+                        if(typeof key === "string") return createNamesProxy(key)
+                    }
+                    if(typeof key === "string") return createNamesProxy(`${target}.${key}`)
+                }
+            }
+        ) as any
+    }
+    const names: namesType<z.infer<T>> = createNamesProxy("")
+
 
     let Jinputs: {[key: string]: JQuery<HTMLInputElement> | typeof Jinputs} = {}
-    let errors: {path: string[], errors: string[]}[] = []
+    export let errors: {path: string[], errors: string[]}[] = []
 
     let errorContainer = typeof document !== "undefined" ? J("<div></div>") : {}
     $: JerrorContainer = typeof document !== "undefined" ? J(errorContainer) : {} as JQuery<HTMLDivElement>
@@ -98,13 +123,35 @@
     }
 
     function validation(node: HTMLFormElement): ActionReturn<[], {
-        "on:validate-data": ValidateDataEvent<T>
+        "on:validate-data"?: ValidateDataEvent<T>
     }> {
         const Jnode = J(node)
+        tick().then(() => {
+            
+                errors.forEach(({path}) => {
+                        let name = path.pop()!
+                        const Jelement = Jnode.find(restrictPath(path, name ?? "")) as JQuery<HTMLInputElement>
+                        path.push(name)
 
+                        let Jparent = Jelement.parent("[data-form-section-container]")
+
+                        if(Jparent.length < 1) {
+                        Jparent = Jelement.wrap(`<div data-form-section-container></div>`).parent("[data-form-section-container]")
+                        }
+                        if(Jparent.find("[data-form-error]").length < 1) {
+                        Jparent.append(`<div data-form-error></div>`)
+                        }
+                        Jparent.find("[data-form-error]").html(JerrorContainer.find(`[data-form-error-path=${path.join("-")}]`).html())
+
+                    })
+        })
 
         function restrictPath(path: readonly string[], name: string) {
-            const newPath = path.reduce((selecetors, key) => {
+            const path_local = [...path]
+            if(name.length < 1) {
+                name = path_local.pop()!
+            }
+            const newPath = path_local.reduce((selecetors, key) => {
                 return [
                     ...selecetors.map(selector => `${selector}> [data-form-section=${key}] `),
                     ...selecetors.map(selector => `${selector}*:not([data-form-section]) [data-form-section=${key}] `)]
@@ -112,23 +159,22 @@
 
             if(name.length < 1) return newPath.join(", ")
             return [
-                ...newPath.map(key => `${key}> [name=${name}]`),
-                ...newPath.map(key => `${key}*:not([data-form-section]) [name=${name}]`)
+                ...newPath.map(key => `${key} [data-name=${name}]`),
+                ...newPath.map(key => `${key}*:not([data-form-section]) [data-name=${name}]`)
             ].join(", ")
         }
 
 
         function throwError(name: string, givenPath: string[], error: z.ZodError) {
             const truePath = name.length < 1 ? givenPath : [...givenPath, name]
-
-            const Jelement = Jnode.find(restrictPath(givenPath, name)) as JQuery<HTMLInputElement>
+            const elementSelector = restrictPath(givenPath, name)
+            const Jelement = Jnode.find(elementSelector) as JQuery<HTMLInputElement>
 
             let Jparent = Jelement.parent("[data-form-section-container]")
 
             if(Jparent.length < 1) {
                 Jparent = Jelement.wrap(`<div data-form-section-container></div>`).parent("[data-form-section-container]")
             }
-
             let errorIndex = errors.findIndex(
                 error =>
                     truePath.length === error.path.length
@@ -140,18 +186,19 @@
                 errors = [
                     ...errors,
                     {
-                        path: name.length < 1 ? truePath : [...truePath, name],
+                        path: truePath,
                         errors: []
                     }
                 ]
             }
             errors[errorIndex].errors = error.issues.map(value => value.message)
             errors = [...errors]
-            setTimeout(() => {
+            tick().then(() => {
                 if(Jparent.find("[data-form-error]").length < 1) {
                     Jparent.append(`<div data-form-error></div>`)
                 }
-                Jparent.find("[data-form-error]").html(JerrorContainer.find(`[data-form-error-path=${truePath.join("-")}]`).html())
+                Jparent.find("[data-form-error]")
+                    .html(JerrorContainer.find(`[data-form-error-path=${truePath.join("-")}]`).html())
             })
         }
 
@@ -218,9 +265,18 @@
             const input = Jnode.find(inputSelector) as JQuery<HTMLInputElement>
 
             if(input.length > 0) {
+                let value: number | Date | string | null = input[0].valueAsNumber 
+                    ?? input[0].valueAsDate 
+                    ?? input[0].value
+                if(isNaN(value ?? NaN)) {
+                    value = null
+                }
+                if(typeof value === "string" && value == "") {
+                    value = null
+                }
                 setDataPath(
                     [...path, name],
-                    input[0].valueAsNumber ?? input[0].valueAsDate ?? input[0].value
+                    value
                 )
                 setInputPath([...path, name], input)
             }
@@ -231,6 +287,7 @@
                     .empty()
 
                 let inputValue = e.target.valueAsNumber ?? e.target.valueAsDate ?? e.target.value
+                if(e.target.value == "") inputValue = null
                 if(!(e.target as HTMLInputElement).dispatchEvent(
                     new CustomEvent(
                         "value-transform", {
@@ -396,18 +453,25 @@
                     return
                 }
             })
+            errors = errors.filter(error => error.errors.length > 0)
         })
-        return {}
+        return {
+            destroy() {
+                Jnode.off("input")
+                Jnode.off("blur")
+            }
+        }
     }
 
-    function formInput(node: HTMLInputElement): ActionReturn<[], {
-        "on:value-transform": ValueTransformEvent,
-        "on:validate-value": ValidateValueEvent,
+    function formInput(node: HTMLInputElement, name?: string): ActionReturn<[], {
+        "on:value-transform"?: ValueTransformEvent,
+        "on:validate-value"?: ValidateValueEvent,
     }> {
+        if(name != null) J(node).attr("data-name", name)
         return {}
     }
     function formSection(node: HTMLElement, {name}: {name?: string} = {}) {
-        if(name) J(node).attr("data-form-section", name)
+        if(name) J(node).attr("data-form-section", name?.split(".").at(-1)!)
     }
     function formSectionContainer(node: HTMLElement) {
         J(node).attr("data-form-section-container", "")
@@ -417,10 +481,10 @@
     }
 </script>
 
-<slot {validation} {formInput} {formSection} {formSectionContainer} {formError} />
+<slot {validation} {formInput} {formSection} {formSectionContainer} {formError} {names} />
 <div style:display="none" bind:this={errorContainer}>
 
-    {#each errors as error (error.path.join("-"))}
+    {#each errors as error}
         <div data-form-error-path={error.path.join("-")} data-form-error>
             <slot name="error" error={error}>
                 <div>

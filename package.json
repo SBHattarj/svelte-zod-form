@@ -1,6 +1,6 @@
 {
 	"name": "svelte-zod-form",
-	"version": "0.0.1a",
+	"version": "0.1.0",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run package",
@@ -18,19 +18,24 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"svelte": "./dist/index.js"
-		}
-	},
-	"peerDependencies": {
-		"svelte": "^3.54.0"
+		},
+        "./plugin": {
+            "types": "./dist/plugin.d.ts",
+            "import": "./dist/plugin.js",
+            "svelte": "./dist/plugin.js",
+            "default": "./dist/plugin.js"
+        }
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^2.0.0",
-		"@sveltejs/kit": "^1.5.0",
+		"@sveltejs/kit": "^1.25.2",
 		"@sveltejs/package": "^2.0.0",
+		"@sveltejs/vite-plugin-svelte": "^2.4.6",
 		"@types/jquery": "^3.5.16",
 		"publint": "^0.1.9",
-		"svelte": "^3.54.0",
-		"svelte-check": "^3.0.1",
+		"svelte": "^4.2.1",
+		"svelte-check": "^3.5.2",
+		"svelte-preprocess": "^5.0.4",
 		"tslib": "^2.4.1",
 		"typescript": "^4.9.3",
 		"vite": "^4.0.0"
