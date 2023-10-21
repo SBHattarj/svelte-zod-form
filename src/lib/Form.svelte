@@ -1,23 +1,33 @@
 <script context="module">
     export const Value = Symbol("Value")
 </script>
+
 <script lang="ts">
+    import { z, type ZodObject, type ZodRawShape, type ZodTypeAny } from 'zod';
+    import type { ActionReturn } from "svelte/action";
+    import { page } from "$app/stores";
     import { tick } from "svelte";
+    import J from "jquery"
 
 	import type { ValidateDataEvent, ValidateValueEvent, ValueTransformEvent } from './Form';
-    import type { ActionReturn } from "svelte/action";
-    import J from "jquery"
-	import { z, type ZodObject, type ZodRawShape, type ZodTypeAny } from 'zod';
-
-    type T = $$Generic<ZodObject<ZodRawShape>>
-    export let schema: T
-    export let data: z.infer<T> = {}
-
-    export let realTime: boolean = false
-
     type namesType<T> = {
         [key in keyof T]: (T[key] extends number | string | boolean ? {} : namesType<T[key]>) & { [Value]: string }
     }
+
+
+    type T = $$Generic<ZodObject<ZodRawShape>>
+
+
+    export let schema: T
+    export let data: z.infer<T> = {}
+    export let formData: Partial<z.infer<T>> | null = null
+    export let entry: PropertyKey | null | undefined = null
+    export let realTime: boolean = false
+    export let errors: {path: string[], errors: string[]}[] = entry != null 
+        ? $page.form?.[entry]?.errors ?? [] 
+        : $page.form?.errors ?? []
+
+
     function createNamesProxy(name: string): namesType<z.infer<T>> {
         return new Proxy(
             new String(name),
@@ -34,14 +44,17 @@
             }
         ) as any
     }
+
     const names: namesType<z.infer<T>> = createNamesProxy("")
 
 
-    let Jinputs: {[key: string]: JQuery<HTMLInputElement> | typeof Jinputs} = {}
-    export let errors: {path: string[], errors: string[]}[] = []
 
     let errorContainer = typeof document !== "undefined" ? J("<div></div>") : {}
     $: JerrorContainer = typeof document !== "undefined" ? J(errorContainer) : {} as JQuery<HTMLDivElement>
+
+    let Jinputs: {[key: string]: JQuery<HTMLInputElement> | typeof Jinputs} = {}
+
+
 
 
     function setDataPath(pathGiven: readonly string[], value: any) {
@@ -61,7 +74,7 @@
         let currentObj = data
 
         for(let key of path) {
-            currentObj = currentObj[key]
+            currentObj = currentObj?.[key]
         }
         return currentObj
     }
@@ -89,23 +102,6 @@
     }
 
 
-    $: (function inputUpdater(inputs: typeof Jinputs, path: readonly string[] = []) {
-        for(let [key, Jinput] of Object.entries(inputs)) {
-            if(typeof Jinput.val !== "function") {
-                inputUpdater(getInputPath([...path, key]), [...path, key])
-                continue
-            }
-
-            const value = getDataPath([...path, key])
-            if(value instanceof Date) {
-                (Jinput as JQuery<HTMLInputElement>)[0].valueAsDate = value
-            } else {
-                Jinput.val(value as any)
-            }
-        }
-    })(Jinputs)
-
-
     function loopOverZodObject<T extends ZodObject<ZodRawShape>>(
         object: T,
         cb: (name: string, value: Readonly<ZodTypeAny>, path: readonly string[]) => void = () => {},
@@ -126,54 +122,37 @@
         "on:validate-data"?: ValidateDataEvent<T>
     }> {
         const Jnode = J(node)
-        tick().then(() => {
-            
-                errors.forEach(({path}) => {
-                        let name = path.pop()!
-                        const Jelement = Jnode.find(restrictPath(path, name ?? "")) as JQuery<HTMLInputElement>
-                        path.push(name)
-
-                        let Jparent = Jelement.parent("[data-form-section-container]")
-
-                        if(Jparent.length < 1) {
-                        Jparent = Jelement.wrap(`<div data-form-section-container></div>`).parent("[data-form-section-container]")
-                        }
-                        if(Jparent.find("[data-form-error]").length < 1) {
-                        Jparent.append(`<div data-form-error></div>`)
-                        }
-                        Jparent.find("[data-form-error]").html(JerrorContainer.find(`[data-form-error-path=${path.join("-")}]`).html())
-
-                    })
-        })
 
         function restrictPath(path: readonly string[], name: string) {
             const path_local = [...path]
             if(name.length < 1) {
                 name = path_local.pop()!
             }
-            const newPath = path_local.reduce((selecetors, key) => {
-                return [
-                    ...selecetors.map(selector => `${selector}> [data-form-section=${key}] `),
-                    ...selecetors.map(selector => `${selector}*:not([data-form-section]) [data-form-section=${key}] `)]
-            }, [""])
-
-            if(name.length < 1) return newPath.join(", ")
-            return [
-                ...newPath.map(key => `${key} [data-name=${name}]`),
-                ...newPath.map(key => `${key}*:not([data-form-section]) [data-name=${name}]`)
-            ].join(", ")
+            const truePath = [...path_local, name].join(".")
+            return `[data-form-section="${truePath}"], [name="${truePath}"]`
         }
 
 
         function throwError(name: string, givenPath: string[], error: z.ZodError) {
             const truePath = name.length < 1 ? givenPath : [...givenPath, name]
             const elementSelector = restrictPath(givenPath, name)
-            const Jelement = Jnode.find(elementSelector) as JQuery<HTMLInputElement>
+            let Jelement = Jnode.find(elementSelector) as JQuery<HTMLInputElement>
+            if(
+                Jelement.length > 1 
+                && Jelement.has("[type=checkbox], [type=radio]")
+            ) {
+                const JelementNew = Jelement.not("input")
+                if(JelementNew.length > 0) {
+                    Jelement = JelementNew
+                }
+            }
 
             let Jparent = Jelement.parent("[data-form-section-container]")
 
             if(Jparent.length < 1) {
-                Jparent = Jelement.wrap(`<div data-form-section-container></div>`).parent("[data-form-section-container]")
+                Jparent = Jelement.wrap(
+                    `<div data-form-section-container></div>`
+                ).parent("[data-form-section-container]")
             }
             let errorIndex = errors.findIndex(
                 error =>
@@ -258,21 +237,71 @@
             }
         })
 
-        loopOverZodObject(schema, (name, value, path) => {
+        loopOverZodObject(schema, (name, inputSchema, path) => {
             errors = [...errors, {path: [...path, name], errors: []}]
 
             const inputSelector = restrictPath(path, name)
-            const input = Jnode.find(inputSelector) as JQuery<HTMLInputElement>
+            const truePath = [...path, name]
+            let input = Jnode.find(inputSelector) as JQuery<HTMLInputElement>
+            const existingValue = getDataPath([...path, name])
 
-            if(input.length > 0) {
-                let value: number | Date | string | null = input[0].valueAsNumber 
+            let prevSection = input as JQuery<HTMLElement>
+            let currentSection = input.parents(`[data-form-section="${path.join(".")}"]`)
+            for(let i = 0; i < path.length; i++) {
+                if(currentSection.length < 1) {
+                    prevSection.wrap(`<div data-form-section="${truePath.slice(0, i+1).join(".")}"></div>`)
+                    currentSection = prevSection.parents(`[data-form-section="${truePath.slice(0, i+1).join(".")}"]`)
+                }
+                prevSection = currentSection
+                currentSection = currentSection.parent(`[data-form-section="${truePath.slice(0, i).join(".")}"]`)
+            }
+
+            const JparentSectionContainer = input.parent("[data-form-section-container]")
+
+            if(JparentSectionContainer.length < 1) {
+                input.wrap(
+                    `<div data-form-section-container></div>`
+                )
+            }
+            input = input.filter("input").prop("required", false)
+            if(input.attr("type") == "checkbox") {
+                const value: string[] = []
+                if(existingValue != null) {
+                    J.each(input, (index, checkbox) => {
+                        checkbox.checked = existingValue.includes(checkbox.value)
+                    })
+                    value.push(...(Array.isArray(existingValue) ? existingValue : []))
+                } 
+                else {
+                    J.each(input, (index, checkbox) => {
+                        if(checkbox.checked) {
+                            value.push(checkbox.value)
+                        }
+                    })
+                }
+                setDataPath(
+                    [...path, name],
+                    value
+                )
+                setInputPath([...path, name], input)
+            }
+            else if(input.attr("type") === "radio") {
+                const value = existingValue ?? input.filter(":checked").val()
+                setDataPath(
+                    [...path, name],
+                    value
+                )
+                setInputPath([...path, name], input)
+            }
+            else if(input.length > 0) {
+                let value = existingValue as any ?? input[0].valueAsNumber 
                     ?? input[0].valueAsDate 
                     ?? input[0].value
-                if(isNaN(value ?? NaN)) {
-                    value = null
+                if(isNaN(value as any ?? NaN)) {
+                    value = undefined
                 }
                 if(typeof value === "string" && value == "") {
-                    value = null
+                    value = undefined
                 }
                 setDataPath(
                     [...path, name],
@@ -287,7 +316,27 @@
                     .empty()
 
                 let inputValue = e.target.valueAsNumber ?? e.target.valueAsDate ?? e.target.value
-                if(e.target.value == "") inputValue = null
+                if(e.target.value == "" || isNaN(e.target.value)) inputValue = undefined
+                if(e.target.type == "checkbox") {
+                    inputValue = []
+                    J(`[name="${e.target.name}"]`).each((_, checkbox) => {
+                        if(checkbox instanceof HTMLInputElement) {
+                            if(checkbox.checked) {
+                                inputValue.push(checkbox.value)
+
+                            }
+                        }
+                    })
+                }
+                if(e.target.type == "radio") {
+                    J(`[name="${e.target.name}"]`).each((_, radio) => {
+                        if(radio instanceof HTMLInputElement) {
+                            if(radio.checked) {
+                                inputValue = radio.value
+                            }
+                        }
+                    })
+                }
                 if(!(e.target as HTMLInputElement).dispatchEvent(
                     new CustomEvent(
                         "value-transform", {
@@ -305,10 +354,8 @@
                 const input = Jnode.find(inputSelector) as JQuery<HTMLInputElement>
                 setInputPath([...path, name], input)
 
-
-
                 if(realTime) {
-                    let result = value.safeParse(getDataPath([...path, name]))
+                    let result = inputSchema.safeParse(getDataPath([...path, name]))
 
                     if(!result.success) {
                         result.error.issues = result
@@ -326,10 +373,10 @@
                                         if(!result.success) result.error = error
                                     },
                                     revalidate(data: z.infer<T>) {
-                                        result = schema.safeParse(data)
+                                        result = inputSchema.safeParse(data)
                                     },
                                     value: getDataPath([...path, name]),
-                                    schema: value,
+                                    schema: inputSchema,
                                     path,
                                     name,
                                     ...result,
@@ -387,7 +434,10 @@
                 }
             })
             Jnode.on("blur", inputSelector, e => {
-                let result = value.safeParse(getDataPath([...path, name]))
+                if(!e.target.isConnected) {
+                    return
+                }
+                let result = inputSchema.safeParse(getDataPath([...path, name]))
                 const input = Jnode.find(inputSelector) as JQuery<HTMLInputElement>
 
                 setInputPath([...path, name], input)
@@ -405,11 +455,11 @@
                                     result.success = false
                                     if(!result.success) result.error = error
                                 },
-                                revalidate(data: z.infer<typeof value>) {
-                                    result = schema.safeParse(data)
+                                revalidate(data: z.infer<typeof inputSchema>) {
+                                    result = inputSchema.safeParse(data)
                                 },
                                 value: getDataPath([...path, name]),
-                                schema: value,
+                                schema: inputSchema,
                                 path,
                                 name,
                                 ...result,
@@ -455,6 +505,33 @@
             })
             errors = errors.filter(error => error.errors.length > 0)
         })
+
+
+        tick().then(() => {
+            
+                errors.forEach(({path}) => {
+                    let name = path.pop()!
+                    const Jelement = Jnode.find(restrictPath(path, name ?? "")) as JQuery<HTMLInputElement>
+                    path.push(name)
+
+                    let Jparent = Jelement.parent("[data-form-section-container]")
+
+                    if(Jparent.length < 1) {
+                        Jparent = Jelement.wrap(
+                            `<div data-form-section-container></div>`
+                        ).parent("[data-form-section-container]")
+                    }
+                    if(Jparent.find("[data-form-error]").length < 1) {
+                        Jparent.append(`<div data-form-error></div>`)
+                    }
+                    Jparent
+                    .find("[data-form-error]")
+                    .html(JerrorContainer.find(`[data-form-error-path=${path.join("-")}]`).html())
+
+                })
+        })
+
+
         return {
             destroy() {
                 Jnode.off("input")
@@ -463,21 +540,62 @@
         }
     }
 
-    function formInput(node: HTMLInputElement, name?: string): ActionReturn<[], {
+    function formInput(node: HTMLInputElement): ActionReturn<[], {
         "on:value-transform"?: ValueTransformEvent,
         "on:validate-value"?: ValidateValueEvent,
     }> {
-        if(name != null) J(node).attr("data-name", name)
         return {}
     }
-    function formSection(node: HTMLElement, {name}: {name?: string} = {}) {
-        if(name) J(node).attr("data-form-section", name?.split(".").at(-1)!)
+    function formSection(node: HTMLElement, name?: string) {
+        if(name) J(node).attr("data-form-section", name)
     }
     function formSectionContainer(node: HTMLElement) {
         J(node).attr("data-form-section-container", "")
     }
     function formError(node: HTMLElement) {
         J(node).attr("data-form-error", "")
+    }
+
+
+    $: {
+        errors = entry != null
+            ? $page.form?.[entry]?.errors ?? []
+            : $page.form?.errors ?? []
+    }
+    $: (function inputUpdater(inputs: typeof Jinputs, path: readonly string[] = []) {
+        for(let [key, Jinput] of Object.entries(inputs)) {
+            if(typeof Jinput.val !== "function") {
+                inputUpdater(getInputPath([...path, key]), [...path, key])
+                continue
+            }
+            let JinputNew = Jinput as JQuery<HTMLInputElement>
+            if(["checkbox", "radio"].includes(JinputNew.filter("input").attr("type") ?? "")) {
+                const value = getDataPath([...path, key])
+                if(value != null)
+                    JinputNew.filter(`[value="${value}"]`).prop("checked", true)
+                return
+            }
+
+            const value = getDataPath([...path, key])
+            if(value instanceof Date) {
+                (JinputNew as JQuery<HTMLInputElement>)[0].valueAsDate = value
+            } else {
+                JinputNew.val(value as any)
+            }
+        }
+    })(Jinputs)
+    $: {
+        if(formData != null) {
+            data = {...formData, ...data}
+        }
+        else if(entry != null) {
+            if($page.form?.data?.[entry] != null) {
+                data = {...$page.form[entry], ...data}
+            }
+        }
+        else if($page.form?.data != null) {
+            data = {...$page.form.data, ...data}
+        }
     }
 </script>
 

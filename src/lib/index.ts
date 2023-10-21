@@ -1,10 +1,19 @@
 import { fail, type Action } from "@sveltejs/kit"
 import { z } from "zod"
 
-// Reexport your entry components here
 export {default} from "./Form.svelte"
 export * from "./Form.svelte"
+
 export type {ValidateDataEvent, ValidateValueEvent, ValueTransformEvent} from "./Form"
+
+const primitives = [
+    "Number",
+    "Array",
+    "Boolean",
+    "String",
+    "BigInt"
+] as const
+const objectToBe = Symbol("objectToBe")
 
 function getDataPath(data: any, path: readonly string[]) {
     let currentObj = data
@@ -42,31 +51,50 @@ function throwError(
 export function zodAction<
     T extends z.ZodSchema,
     ActionInput extends Record<string, any>,
-    OutputData extends void | Record<string, any>
+    OutputData extends void | Record<string, any> = void,
+    Entry extends PropertyKey | undefined | null = null
 >(
-    schema: T,
-    validate: (event: {
-        data: z.infer<T>,
-        throwError: (error: z.ZodError) => void,
-        revalidate: () => void,
+    {
+        schema,
+        validate = () => true,
+        action = () => ({} as OutputData),
+        entry
+    }: {
+        schema: T,
+        validate?: (event: {
+            data: z.infer<T>,
+            throwError: (error: z.ZodError) => void,
+            revalidate: () => void,
+            success: boolean,
+            error?: z.ZodError,
+            schema: T
+        }) => boolean, 
+        action?: (
+                event: Parameters<Action<ActionInput, OutputData>>[0],
+                data: z.infer<T>,
+                formData: FormData
+        ) => ReturnType<Action<ActionInput, OutputData>>,
+        entry?: Entry
+    }
+): Action<ActionInput, Entry extends PropertyKey ? {
+    [H in Entry]: {
         success: boolean,
-        error?: z.ZodError,
-        schema: T
-    }) => boolean, 
-        action: (
-            event: Parameters<Action<ActionInput, OutputData>>[0],
-            data: z.infer<T>
-    ) => ReturnType<Action<ActionInput, OutputData>>
-): Action<ActionInput, {
-    success: boolean,
-    data: z.infer<T>,
-    actionData?: OutputData,
-    errors?: {path: string[], errors: string[]}[],
-    status?: number
+        data: z.infer<T>,
+        actionData?: OutputData,
+        errors?: {path: string[], errors: string[]}[],
+        status?: number,
+    }
+} : {
+        success: boolean,
+        data: z.infer<T>,
+        actionData?: OutputData,
+        errors?: {path: string[], errors: string[]}[],
+        status?: number,
 }> {
-    return async function (...args: Parameters<Action<z.infer<T>, OutputData>>) {
+    return async function (...args: Parameters<Action<z.infer<T>, OutputData>>): Promise<any> {
+        const formData = await args[0].request.formData()
 
-        const data = entriesToNestedObject(await args[0].request.formData(), schema)
+        const data = entriesToNestedObject(formData, schema)
         let result = schema.safeParse(data)
         let isValid = validate({
             data,
@@ -97,7 +125,9 @@ export function zodAction<
                         ({path, name: setName}) =>
                             setName === name
                             && path.length === issue.path.length
-                            && path.every((key, index) => key === issue.path[index])
+                            && path.every(
+                                (key, index) => key === issue.path[index]
+                            )
                     )
 
                     if(issueIndex < 0) return [{path: issue.path, issues: [issue], name}]
@@ -109,37 +139,143 @@ export function zodAction<
             errorSet.forEach(({path, issues, name}) => {
                 throwError(name, path as string[], new z.ZodError(issues), errors)
             })
+            if(entry != null) return {
+                [entry]: {
+                    success: false,
+                    ...fail(400, data),
+                    errors
+                }
+            }
             return {
                 success: false,
                 ...fail(400, data),
                 errors
             }
         }
-        
+        let actionData = await action(args[0], result.data, formData)
+        if(actionData != null && actionData.success != null && !actionData.success) {
+            if(entry != null) return {
+                [entry]: actionData
+            }
+            return actionData
+        }
+        if(entry != null) return {
+            [entry]: {
+                success: true,
+                data: result.data,
+                actionData
+            }
+        }
         return {
             data: result.data,
-            actionData: await action(args[0], result.data),
+            actionData,
             success: true
         }
     }
 }
-const objectToBe = Symbol("objectToBe")
 
 function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSchema): any {
     const serialized = Object.fromEntries([...[...entries].reduce((acc, [key, value]) => {
         if(key.includes(".")) {
             const [head, ...tail] = key.split(".")
-            if(!acc.has(head)) acc.set(head, {
-                main: [],
-                [objectToBe]: true
-            })
+            if(!acc.has(head)) {
+                acc.set(head, {
+                    main: [],
+                    [objectToBe]: true
+                })
+            }
             acc.get(head)?.main?.push([tail, value])
             return acc
         }
-        try {
-            // @ts-ignore
-            value = globalThis[schema?._def?.shape?.()?.[key]?._def.typeName?.replace("Zod", "")](value)
-        } catch {
+        if(acc.has(key) && !Array.isArray(acc.get(key))) {
+            value = [value]
+            value.push(acc.get(key))
+            acc.set(key, value)
+            if(schema instanceof z.ZodArray) {
+                let type = schema._def.type
+                if(type instanceof z.ZodType) {
+                    value = value.map((ell: any) => {
+                        let typeName: 
+                            typeof primitives[number]
+                            | "Map"
+                            | "Set"
+                            | "Date" = type._def.typeName.replace("Zod", "")
+
+                        try {
+                            if(typeName == "Map") {
+                                value = new Map(value)
+                            }
+                            else if(typeName == "Set") {
+                                value = new Set(value)
+                            } 
+                            else if(typeName == "Date") {
+                                value = new Date(value)
+                            }
+                            else if(primitives.includes(typeName)) {
+                                value = globalThis[typeName]?.(value)
+                            }
+                        } catch {
+                        } finally {
+                            return ell
+                        }
+                    })
+                }
+            }
+            return acc
+        }
+        if(acc.has(key)) {
+            if(schema instanceof z.ZodArray) {
+                let type = schema._def.type
+                if(type instanceof z.ZodType) {
+                    let typeName: 
+                        typeof primitives[number]
+                        | "Map"
+                        | "Set"
+                        | "Date" = type._def.typeName.replace("Zod", "")
+                    try {
+                        if(typeName == "Map") {
+                            value = new Map(value)
+                        }
+                        else if(typeName == "Set") {
+                            value = new Set(value)
+                        } 
+                        else if(typeName == "Date") {
+                            value = new Date(value)
+                        }
+                        else if(primitives.includes(typeName)) {
+                            value = globalThis[typeName]?.(value)
+                        }
+                    } catch {
+                    }
+                }
+            }
+            acc.get(key)?.push(value)
+            return acc
+        }
+        if(schema instanceof z.ZodObject) {
+            let type: unknown = schema?._def.shape()?.[key]
+            if(type instanceof z.ZodType) {
+                let typeName: 
+                    typeof primitives[number]
+                    | "Map"
+                    | "Set"
+                    | "Date" = type._def.typeName.replace("Zod", "")
+                try {
+                    if(typeName == "Map") {
+                        value = new Map(value)
+                    }
+                    else if(typeName == "Set") {
+                        value = new Set(value)
+                    } 
+                    else if(typeName == "Date") {
+                        value = new Date(value)
+                    }
+                    else if(primitives.includes(typeName)) {
+                        value = globalThis[typeName]?.(value)
+                    }
+                } catch {
+                }
+            }
         }
         acc.set(key, value)
         return acc
@@ -149,8 +285,16 @@ function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSche
             if(integerKey.toString().length === key.length && !isNaN(integerKey)) {
                 return [integerKey, value.main]
             }
-            // @ts-ignore
-            return [key, entriesToNestedObject(value.main, schema?._def?.shape?.()?.[key])]
+            if(schema instanceof z.ZodObject) {
+                let shape: unknown = schema._def.shape()[key]
+                if(shape instanceof z.ZodType) {
+                    return [key, entriesToNestedObject(value.main, shape)]
+                }
+                if(shape == null) {
+                    return [key, entriesToNestedObject(value.main, schema)]
+                }
+                return [key, value.main]
+            }
         }
         return [key, value]
     }))

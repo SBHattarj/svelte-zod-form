@@ -1,8 +1,15 @@
 import { fail } from "@sveltejs/kit";
 import { z } from "zod";
-// Reexport your entry components here
 export { default } from "./Form.svelte";
 export * from "./Form.svelte";
+const primitives = [
+    "Number",
+    "Array",
+    "Boolean",
+    "String",
+    "BigInt"
+];
+const objectToBe = Symbol("objectToBe");
 function getDataPath(data, path) {
     let currentObj = data;
     for (let key of path) {
@@ -24,9 +31,10 @@ function throwError(name, givenPath, error, errors) {
     errors[errorIndex].errors = error.issues.map(value => value.message);
     return errors;
 }
-export function zodAction(schema, validate, action) {
+export function zodAction({ schema, validate = () => true, action = () => ({}), entry }) {
     return async function (...args) {
-        const data = entriesToNestedObject(await args[0].request.formData(), schema);
+        const formData = await args[0].request.formData();
+        const data = entriesToNestedObject(formData, schema);
         let result = schema.safeParse(data);
         let isValid = validate({
             data,
@@ -61,37 +69,136 @@ export function zodAction(schema, validate, action) {
             errorSet.forEach(({ path, issues, name }) => {
                 throwError(name, path, new z.ZodError(issues), errors);
             });
+            if (entry != null)
+                return {
+                    [entry]: {
+                        success: false,
+                        ...fail(400, data),
+                        errors
+                    }
+                };
             return {
                 success: false,
                 ...fail(400, data),
                 errors
             };
         }
+        let actionData = await action(args[0], result.data, formData);
+        if (actionData != null && actionData.success != null && !actionData.success) {
+            if (entry != null)
+                return {
+                    [entry]: actionData
+                };
+            return actionData;
+        }
+        if (entry != null)
+            return {
+                [entry]: {
+                    success: true,
+                    data: result.data,
+                    actionData
+                }
+            };
         return {
             data: result.data,
-            actionData: await action(args[0], result.data),
+            actionData,
             success: true
         };
     };
 }
-const objectToBe = Symbol("objectToBe");
 function entriesToNestedObject(entries, schema) {
     const serialized = Object.fromEntries([...[...entries].reduce((acc, [key, value]) => {
             if (key.includes(".")) {
                 const [head, ...tail] = key.split(".");
-                if (!acc.has(head))
+                if (!acc.has(head)) {
                     acc.set(head, {
                         main: [],
                         [objectToBe]: true
                     });
+                }
                 acc.get(head)?.main?.push([tail, value]);
                 return acc;
             }
-            try {
-                // @ts-ignore
-                value = globalThis[schema?._def?.shape?.()?.[key]?._def.typeName?.replace("Zod", "")](value);
+            if (acc.has(key) && !Array.isArray(acc.get(key))) {
+                value = [value];
+                value.push(acc.get(key));
+                acc.set(key, value);
+                if (schema instanceof z.ZodArray) {
+                    let type = schema._def.type;
+                    if (type instanceof z.ZodType) {
+                        value = value.map((ell) => {
+                            let typeName = type._def.typeName.replace("Zod", "");
+                            try {
+                                if (typeName == "Map") {
+                                    value = new Map(value);
+                                }
+                                else if (typeName == "Set") {
+                                    value = new Set(value);
+                                }
+                                else if (typeName == "Date") {
+                                    value = new Date(value);
+                                }
+                                else if (primitives.includes(typeName)) {
+                                    value = globalThis[typeName]?.(value);
+                                }
+                            }
+                            catch {
+                            }
+                            finally {
+                                return ell;
+                            }
+                        });
+                    }
+                }
+                return acc;
             }
-            catch {
+            if (acc.has(key)) {
+                if (schema instanceof z.ZodArray) {
+                    let type = schema._def.type;
+                    if (type instanceof z.ZodType) {
+                        let typeName = type._def.typeName.replace("Zod", "");
+                        try {
+                            if (typeName == "Map") {
+                                value = new Map(value);
+                            }
+                            else if (typeName == "Set") {
+                                value = new Set(value);
+                            }
+                            else if (typeName == "Date") {
+                                value = new Date(value);
+                            }
+                            else if (primitives.includes(typeName)) {
+                                value = globalThis[typeName]?.(value);
+                            }
+                        }
+                        catch {
+                        }
+                    }
+                }
+                acc.get(key)?.push(value);
+                return acc;
+            }
+            if (schema instanceof z.ZodObject) {
+                let type = schema?._def.shape()?.[key];
+                if (type instanceof z.ZodType) {
+                    let typeName = type._def.typeName.replace("Zod", "");
+                    try {
+                        if (typeName == "Map") {
+                            value = new Map(value);
+                        }
+                        else if (typeName == "Set") {
+                            value = new Set(value);
+                        }
+                        else if (typeName == "Date") {
+                            value = new Date(value);
+                        }
+                        else if (primitives.includes(typeName)) {
+                            value = globalThis[typeName]?.(value);
+                        }
+                    }
+                    catch {
+                    }
+                }
             }
             acc.set(key, value);
             return acc;
@@ -101,8 +208,16 @@ function entriesToNestedObject(entries, schema) {
             if (integerKey.toString().length === key.length && !isNaN(integerKey)) {
                 return [integerKey, value.main];
             }
-            // @ts-ignore
-            return [key, entriesToNestedObject(value.main, schema?._def?.shape?.()?.[key])];
+            if (schema instanceof z.ZodObject) {
+                let shape = schema._def.shape()[key];
+                if (shape instanceof z.ZodType) {
+                    return [key, entriesToNestedObject(value.main, shape)];
+                }
+                if (shape == null) {
+                    return [key, entriesToNestedObject(value.main, schema)];
+                }
+                return [key, value.main];
+            }
         }
         return [key, value];
     }));

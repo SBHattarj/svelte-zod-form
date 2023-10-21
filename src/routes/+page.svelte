@@ -13,8 +13,7 @@
         errors = form?.errors ?? [];
     }
     $: console.log("errors", errors)
-    $: console.log(form)
-    let clientHeight = 0
+    $: console.log(form?.data)
 </script>
 <h1>Welcome to your library project</h1>
 <p>Create your package using @sveltejs/package and preview/showcase your work with SvelteKit</p>
@@ -23,15 +22,19 @@
     a: z.number(),
     b: z.object({
         c: z.number()
-    })
+    }),
+    c: z.string()
 })} errors={form?.errors ?? []}  let:validation let:formSection let:formSectionContainer let:formError let:formInput>
     <form use:validation method="post">
         a<input type="number" name={names.a[Value]}>
-        <div use:formSection={{name: names.b[Value]}}>
             <div use:formSectionContainer>
                 <div use:formError></div>
                 b<input type="number" name={names.b.c[Value]} use:formInput>
             </div>
+        <div use:formSection={names.c[Value]}>
+            <div><label for="a">a</label><input name={names.c[Value]} id="a" type="radio" value="hello"></div>
+            <div><label for="b">b</label><input name={names.c[Value]} id="b" type="radio" value="hello bye"></div>
+            <div><label for="c">c</label><input name={names.c[Value]} id="c" type="radio" value="bye"></div>
         </div>
         <button>submit</button>
     </form>
