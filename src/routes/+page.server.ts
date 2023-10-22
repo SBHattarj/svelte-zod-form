@@ -4,7 +4,7 @@ import type { Actions } from './$types'
 export const actions: Actions = {
     default: zodAction({
         schema: z.object({
-            a: z.number(),
+            a: z.string(),
             b: z.object({
                 c: z.number().min(3).max(10)
             }),

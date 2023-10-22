@@ -2,6 +2,7 @@ import { fail, type Action } from "@sveltejs/kit"
 import { z } from "zod"
 
 export {default} from "./Form.svelte"
+export {default as FormErrorComponent} from "./FormError.svelte"
 export * from "./Form.svelte"
 
 export type {ValidateDataEvent, ValidateValueEvent, ValueTransformEvent} from "./Form"

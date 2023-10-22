@@ -1,6 +1,7 @@
 import { type Action } from "@sveltejs/kit";
 import { z } from "zod";
 export { default } from "./Form.svelte";
+export { default as FormErrorComponent } from "./FormError.svelte";
 export * from "./Form.svelte";
 export type { ValidateDataEvent, ValidateValueEvent, ValueTransformEvent } from "./Form";
 export declare function zodAction<T extends z.ZodSchema, ActionInput extends Record<string, any>, OutputData extends void | Record<string, any> = void, Entry extends PropertyKey | undefined | null = null>({ schema, validate, action, entry }: {

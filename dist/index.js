@@ -1,6 +1,7 @@
 import { fail } from "@sveltejs/kit";
 import { z } from "zod";
 export { default } from "./Form.svelte";
+export { default as FormErrorComponent } from "./FormError.svelte";
 export * from "./Form.svelte";
 const primitives = [
     "Number",

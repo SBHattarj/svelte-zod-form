@@ -1,18 +1,46 @@
-<script context="module">
-    export const Value = Symbol("Value")
-</script>
-
-<script>import { z } from "zod";
-import { page } from "$app/stores";
-import { tick } from "svelte";
+<script context="module">import { z } from "zod";
 import J from "jquery";
-export let schema;
-export let data = {};
-export let formData = null;
-export let entry = null;
-export let realTime = false;
-export let errors = entry != null ? $page.form?.[entry]?.errors ?? [] : $page.form?.errors ?? [];
-function createNamesProxy(name) {
+export const Value = Symbol("Value");
+export const Errors = Symbol("Errors");
+export const Path = Symbol("Path");
+export const All = Symbol("All");
+export const HasErrors = Symbol("HasErrors");
+export const HasErrorsWithin = Symbol("HasErrorsWithin");
+export function restrictPath(path, name) {
+    const truePath = name.length < 1 ? path : [...path, name].join(".");
+    return `[name="${truePath}"]`;
+}
+export function setPath(pathGiven, value, data) {
+    const path = [...pathGiven];
+    let currentObj = data;
+    const name = path.pop();
+    for (let key of path) {
+        if (currentObj[key] == null)
+            currentObj[key] = {};
+        currentObj = currentObj[key];
+    }
+    currentObj[name] = value;
+    return data;
+}
+export function getPath(path, data) {
+    let currentObj = data;
+    for (let key of path) {
+        currentObj = currentObj?.[key];
+    }
+    return currentObj;
+}
+export function loopOverZodObject(object, cb = () => {
+}, path = []) {
+    const shape = object._def.shape();
+    for (const [name, value] of Object.entries(shape)) {
+        if (value._def?.shape) {
+            loopOverZodObject(value, cb, [...path, name]);
+            continue;
+        }
+        cb(name, value, path);
+    }
+}
+export function createNamesProxy(name) {
     return new Proxy(new String(name), {
         get(target, key) {
             if (key === Value) {
@@ -27,103 +55,129 @@ function createNamesProxy(name) {
         }
     });
 }
-const names = createNamesProxy("");
-let errorContainer = typeof document !== "undefined" ? J("<div></div>") : {};
-$: JerrorContainer = typeof document !== "undefined" ? J(errorContainer) : {};
-let Jinputs = {};
-function setDataPath(pathGiven, value) {
-    const path = [...pathGiven];
-    let currentObj = data;
-    const name = path.pop();
-    for (let key of path) {
-        if (currentObj[key] == null)
-            currentObj[key] = {};
-        currentObj = currentObj[key];
-    }
-    currentObj[name] = value;
-    data = { ...data };
-}
-function getDataPath(path) {
-    let currentObj = data;
-    for (let key of path) {
-        currentObj = currentObj?.[key];
-    }
-    return currentObj;
-}
-function setInputPath(pathGiven, value) {
-    const path = [...pathGiven];
-    let currentObj = Jinputs;
-    const name = path.pop();
-    for (let key of path) {
-        if (currentObj[key] == null)
-            currentObj[key] = {};
-        currentObj = currentObj[key];
-    }
-    currentObj[name] = value;
-    Jinputs = { ...Jinputs };
-}
-function getInputPath(path) {
-    let currentObj = Jinputs;
-    for (let key of path) {
-        currentObj = currentObj[key];
-    }
-    return currentObj;
-}
-function loopOverZodObject(object, cb = () => {
-}, path = []) {
-    const shape = object._def.shape();
-    for (const [name, value] of Object.entries(shape)) {
-        if (value._def?.shape) {
-            loopOverZodObject(value, cb, [...path, name]);
-            continue;
+export function createErrorProxy(path, errors) {
+    return new Proxy({ path, errors }, {
+        get(target, key) {
+            if (key === Errors) {
+                return new Set(target.errors.find(({ path: path2 }) => path2.join(".") === target.path)?.errors ?? []);
+            }
+            if (key === Path) {
+                return target.path.split(".");
+            }
+            if (key === All) {
+                return target.errors.filter(({ path: path2, errors: errors2 }) => path2.join(".").startsWith(target.path) && errors2.length > 0);
+            }
+            if (key === HasErrors) {
+                const currentError = target.errors.find(({ path: path2 }) => path2.join(".") === target.path);
+                return currentError != null && currentError.errors.length > 0;
+            }
+            if (key === HasErrorsWithin) {
+                return target.errors.filter(({ path: path2, errors: errors2 }) => path2.join(".").startsWith(target.path) && errors2.length > 0).length > 0;
+            }
+            if (typeof key !== "string")
+                return;
+            if (target.path === "")
+                return createErrorProxy(key, target.errors);
+            return createErrorProxy(`${target.path}.${key}`, target.errors);
         }
-        cb(name, value, path);
+    });
+}
+export function createValuesProxy(data, schema) {
+    return new Proxy(data, {
+        get(target, key) {
+            if (schema instanceof z.ZodObject) {
+                if (schema._def.shape()[key] instanceof z.ZodObject) {
+                    return target[key] ?? createValuesProxy(target, schema._def.shape()[key]);
+                }
+            }
+            return target[key] ?? "";
+        }
+    });
+}
+export function throwError(name, givenPath, error, Jnode, allErrors) {
+    const truePath = name.length < 1 ? givenPath : [...givenPath, name];
+    const elementSelector = restrictPath(givenPath, name);
+    const truePathStr = truePath.join(".");
+    let Jelement = Jnode.find(elementSelector);
+    if (Jelement.length > 1 && Jelement.has("[type=checkbox], [type=radio]")) {
+        const JelementNew = Jelement.not("input");
+        if (JelementNew.length > 0) {
+            Jelement = JelementNew;
+        }
+    }
+    let errorIndex = allErrors.findIndex((error2) => truePathStr === error2.path.join("."));
+    if (errorIndex < 0) {
+        errorIndex = allErrors.length;
+        allErrors.push({ path: truePath, errors: [] });
+    }
+    allErrors[errorIndex].errors = error.issues.map((value) => value.message);
+    return allErrors;
+}
+export function dispatchValidateValue(target, result, inputSchema, data, details) {
+    return target.dispatchEvent(new CustomEvent("validate-value", {
+        detail: {
+            ...details,
+            setError(error) {
+                result.success = false;
+                result.error = error;
+            },
+            revalidate() {
+                const newResult = inputSchema.safeParse(data);
+                result.success = newResult.success;
+                if (newResult.success) {
+                    result.data = newResult.data;
+                }
+                if (!newResult.success) {
+                    result.error = newResult.error;
+                }
+            },
+            schema: inputSchema,
+            ...result
+        }
+    }));
+}
+export function formInput(_) {
+    return {};
+}
+</script>
+
+<script>import { page } from "$app/stores";
+import FormErrorComponent from "./FormError.svelte";
+export let schema;
+export let data = {};
+export let formData = null;
+export let entry = null;
+export let realTime = false;
+export let allErrors = entry != null ? $page.form?.[entry]?.errors ?? [] : $page.form?.errors ?? [];
+$: errors = createErrorProxy("", allErrors);
+const names = createNamesProxy("");
+$: values = createValuesProxy(data, schema);
+let Jinputs = {};
+function setAllErrors(errors2) {
+    allErrors = errors2;
+}
+function invalidateData(fomrData, pageData) {
+    if (fomrData != null) {
+        data = { ...fomrData, ...data };
+        return;
+    }
+    if (pageData == null)
+        return;
+    if (entry == null) {
+        if (pageData.data == null)
+            return;
+        data = { ...pageData.data, ...data };
+        return;
+    }
+    if (pageData[entry]?.data != null) {
+        data = { ...pageData[entry].data, ...data };
+        return;
     }
 }
+invalidateData(formData, $page.form);
 function validation(node) {
     const Jnode = J(node);
-    function restrictPath(path, name) {
-        const path_local = [...path];
-        if (name.length < 1) {
-            name = path_local.pop();
-        }
-        const truePath = [...path_local, name].join(".");
-        return `[data-form-section="${truePath}"], [name="${truePath}"]`;
-    }
-    function throwError(name, givenPath, error) {
-        const truePath = name.length < 1 ? givenPath : [...givenPath, name];
-        const elementSelector = restrictPath(givenPath, name);
-        let Jelement = Jnode.find(elementSelector);
-        if (Jelement.length > 1 && Jelement.has("[type=checkbox], [type=radio]")) {
-            const JelementNew = Jelement.not("input");
-            if (JelementNew.length > 0) {
-                Jelement = JelementNew;
-            }
-        }
-        let Jparent = Jelement.parent("[data-form-section-container]");
-        if (Jparent.length < 1) {
-            Jparent = Jelement.wrap(`<div data-form-section-container></div>`).parent("[data-form-section-container]");
-        }
-        let errorIndex = errors.findIndex((error2) => truePath.length === error2.path.length && error2.path.every((key, index) => truePath[index] === key));
-        if (errorIndex < 0) {
-            errorIndex = errors.length;
-            errors = [
-                ...errors,
-                {
-                    path: truePath,
-                    errors: []
-                }
-            ];
-        }
-        errors[errorIndex].errors = error.issues.map((value) => value.message);
-        errors = [...errors];
-        tick().then(() => {
-            if (Jparent.find("[data-form-error]").length < 1) {
-                Jparent.append(`<div data-form-error></div>`);
-            }
-            Jparent.find("[data-form-error]").html(JerrorContainer.find(`[data-form-error-path=${truePath.join("-")}]`).html());
-        });
-    }
+    invalidateData(formData, $page.form);
     Jnode.on("submit", (e) => {
         let result = schema.safeParse(data);
         const doDefault = node.dispatchEvent(new CustomEvent("validate-data", {
@@ -146,267 +200,217 @@ function validation(node) {
         if (!result.success) {
             e.preventDefault();
             const errorSet = result.error.issues.reduce((issueSet, issue) => {
-                const value = getDataPath(issue.path);
+                const issuePathStr = issue.path.join(".");
+                const value = getPath(issue.path, data);
                 let name = "";
                 if (value != null && typeof value !== "object") {
                     name = issue.path.pop();
                 }
-                const issueIndex = issueSet.findIndex(({ path, name: setName }) => setName === name && path.length === issue.path.length && path.every((key, index) => key === issue.path[index]));
-                if (issueIndex < 0)
-                    return [{ path: issue.path, issues: [issue], name }];
+                const issueIndex = issueSet.findIndex(({ path, name: setName }) => setName === name && path.join(".") === issuePathStr);
+                if (issueIndex < 0) {
+                    issueSet.push({ path: issue.path, issues: [issue], name });
+                    return issueSet;
+                }
                 issueSet[issueIndex].issues.push(issue);
                 return issueSet;
             }, []);
             errorSet.forEach(({ path, issues, name }) => {
-                throwError(name, path, new z.ZodError(issues));
+                allErrors = throwError(name, path, new z.ZodError(issues), Jnode, allErrors);
             });
             return;
         }
     });
+    const inputSelectors = /* @__PURE__ */ new Set();
+    function getInputTrueValue(target) {
+        if (target.type === "checkbox") {
+            return J(`input:checked[name="${target.name}"]`).map((_, input) => {
+                return input.value;
+            });
+        }
+        if (target.type === "radio") {
+            const value = J(`input:checked[name="${target.name}"]`)[0].value;
+            J(`input[name="${target.name}"][value="${value}"]`).prop("checked", true);
+            return value;
+        }
+        if (target.value === "")
+            return void 0;
+        if (target.type === "number" && isNaN(target.valueAsNumber))
+            return void 0;
+        if (target.type === "number")
+            return target.valueAsNumber;
+        return target.valueAsDate ?? target.value;
+    }
+    function getInputValue(target) {
+        let inputValue = getInputTrueValue(target);
+        const eventReturn = target.dispatchEvent(new CustomEvent("value-transform", {
+            detail: {
+                setValue(newValue) {
+                    inputValue = newValue;
+                },
+                inputValue
+            }
+        }));
+        return [inputValue, eventReturn];
+    }
     loopOverZodObject(schema, (name, inputSchema, path) => {
-        errors = [...errors, { path: [...path, name], errors: [] }];
         const inputSelector = restrictPath(path, name);
         const truePath = [...path, name];
-        let input = Jnode.find(inputSelector);
-        const existingValue = getDataPath([...path, name]);
-        let prevSection = input;
-        let currentSection = input.parents(`[data-form-section="${path.join(".")}"]`);
-        for (let i = 0; i < path.length; i++) {
-            if (currentSection.length < 1) {
-                prevSection.wrap(`<div data-form-section="${truePath.slice(0, i + 1).join(".")}"></div>`);
-                currentSection = prevSection.parents(`[data-form-section="${truePath.slice(0, i + 1).join(".")}"]`);
-            }
-            prevSection = currentSection;
-            currentSection = currentSection.parent(`[data-form-section="${truePath.slice(0, i).join(".")}"]`);
-        }
-        const JparentSectionContainer = input.parent("[data-form-section-container]");
-        if (JparentSectionContainer.length < 1) {
-            input.wrap(`<div data-form-section-container></div>`);
-        }
-        input = input.filter("input").prop("required", false);
-        if (input.attr("type") == "checkbox") {
-            const value = [];
-            if (existingValue != null) {
-                J.each(input, (index, checkbox) => {
-                    checkbox.checked = existingValue.includes(checkbox.value);
-                });
-                value.push(...Array.isArray(existingValue) ? existingValue : []);
-            }
-            else {
-                J.each(input, (index, checkbox) => {
-                    if (checkbox.checked) {
-                        value.push(checkbox.value);
-                    }
-                });
-            }
-            setDataPath([...path, name], value);
-            setInputPath([...path, name], input);
-        }
-        else if (input.attr("type") === "radio") {
-            const value = existingValue ?? input.filter(":checked").val();
-            setDataPath([...path, name], value);
-            setInputPath([...path, name], input);
-        }
-        else if (input.length > 0) {
-            let value = existingValue ?? input[0].valueAsNumber ?? input[0].valueAsDate ?? input[0].value;
-            if (isNaN(value ?? NaN)) {
-                value = void 0;
-            }
-            if (typeof value === "string" && value == "") {
-                value = void 0;
-            }
-            setDataPath([...path, name], value);
-            setInputPath([...path, name], input);
-        }
+        const truePathStr = truePath.join(".");
+        const existingValue = getPath(truePath, data);
+        inputSelectors.add(inputSelector);
+        allErrors.push({ path: truePath, errors: [] });
+        allErrors = allErrors;
+        const input = Jnode.find(inputSelector).filter("input").prop("required", false);
         Jnode.on("input", inputSelector, (e) => {
-            Jnode.find(inputSelector).parent("[data-form-section-container]").find("> [data-form-error], *:not([data-form-section]) [data-form-error]").empty();
-            let inputValue = e.target.valueAsNumber ?? e.target.valueAsDate ?? e.target.value;
-            if (e.target.value == "" || isNaN(e.target.value))
-                inputValue = void 0;
-            if (e.target.type == "checkbox") {
-                inputValue = [];
-                J(`[name="${e.target.name}"]`).each((_, checkbox) => {
-                    if (checkbox instanceof HTMLInputElement) {
-                        if (checkbox.checked) {
-                            inputValue.push(checkbox.value);
-                        }
-                    }
-                });
-            }
-            if (e.target.type == "radio") {
-                J(`[name="${e.target.name}"]`).each((_, radio) => {
-                    if (radio instanceof HTMLInputElement) {
-                        if (radio.checked) {
-                            inputValue = radio.value;
-                        }
-                    }
-                });
-            }
-            if (!e.target.dispatchEvent(new CustomEvent("value-transform", {
-                detail: {
-                    setValue(newValue) {
-                        inputValue = newValue;
-                    },
-                    inputValue
-                }
-            })))
-                e.preventDefault();
-            setDataPath([...path, name], inputValue);
             const input2 = Jnode.find(inputSelector);
-            setInputPath([...path, name], input2);
+            const [inputValue, eventReturn] = getInputValue(input2[0]);
+            if (!eventReturn)
+                e.preventDefault();
+            setPath(truePath, inputValue, data);
+            setPath(truePath, input2, Jinputs);
             if (realTime) {
-                let result = inputSchema.safeParse(getDataPath([...path, name]));
+                let result = inputSchema.safeParse(getPath(truePath, data));
                 if (!result.success) {
-                    result.error.issues = result.error.issues.map((issue) => ({ ...issue, path: [...path, name] }));
+                    result.error.issues = result.error.issues.map((issue) => ({ ...issue, path: truePath }));
                 }
-                const doDefault = e.target.dispatchEvent(new CustomEvent("validate-value", {
-                    detail: {
-                        setError(error) {
-                            result.success = false;
-                            if (!result.success)
-                                result.error = error;
-                        },
-                        revalidate(data2) {
-                            result = inputSchema.safeParse(data2);
-                        },
-                        value: getDataPath([...path, name]),
-                        schema: inputSchema,
-                        path,
-                        name,
-                        ...result
-                    }
-                }));
+                const doDefault = dispatchValidateValue(e.target, result, inputSchema, data, {
+                    value: getPath(truePath, data),
+                    path,
+                    name
+                });
                 if (!doDefault)
                     e.preventDefault();
                 if (!result.success) {
                     e.preventDefault();
                     const errorSet = result.error.issues.reduce((issueSet, issue) => {
-                        const value = getDataPath(issue.path);
+                        const value = getPath(issue.path, data);
                         let name2 = "";
                         if (value != null && typeof value !== "object") {
                             name2 = issue.path.pop();
                         }
-                        const issueIndex = issueSet.findIndex(({ path: path2, name: setName }) => setName === name2 && path2.length === issue.path.length && path2.every((key, index) => key === issue.path[index]));
+                        const issuePathStr = issue.path.join(".");
+                        const issueIndex = issueSet.findIndex(({ path: path2, name: setName }) => setName === name2 && path2.join(".") === issuePathStr);
                         if (issueIndex < 0)
                             return [{ path: issue.path, issues: [issue], name: name2 }];
                         issueSet[issueIndex].issues.push(issue);
                         return issueSet;
                     }, []);
                     errorSet.forEach(({ path: path2, issues, name: name2 }) => {
-                        throwError(name2, path2, new z.ZodError(issues));
+                        allErrors = throwError(name2, path2, new z.ZodError(issues), Jnode, allErrors);
                     });
                     return;
                 }
-                const errorInTree = errors.filter((error) => error.path.every((key, index) => [...path, name][index] === key));
-                errorInTree.forEach((error) => {
-                    error.errors = [];
+                allErrors.forEach((error) => {
+                    if (error.path.join(".") === truePathStr) {
+                        error.errors.length = 0;
+                    }
                 });
-                errors = [...errors];
-                return;
+                allErrors = allErrors;
             }
         });
         Jnode.on("blur", inputSelector, (e) => {
             if (!e.target.isConnected) {
                 return;
             }
-            let result = inputSchema.safeParse(getDataPath([...path, name]));
+            let result = inputSchema.safeParse(getPath(truePath, data));
             const input2 = Jnode.find(inputSelector);
-            setInputPath([...path, name], input2);
-            if (!result.success)
-                result.error.issues = result.error.issues.map((issue) => ({ ...issue, path: [...path, name] }));
-            const doDefault = e.target.dispatchEvent(new CustomEvent("validate-value", {
-                detail: {
-                    setError(error) {
-                        result.success = false;
-                        if (!result.success)
-                            result.error = error;
-                    },
-                    revalidate(data2) {
-                        result = inputSchema.safeParse(data2);
-                    },
-                    value: getDataPath([...path, name]),
-                    schema: inputSchema,
-                    path,
-                    name,
-                    ...result
-                }
-            }));
+            setPath(truePath, input2, Jinputs);
+            if (!result.success) {
+                result.error.issues = result.error.issues.map((issue) => ({ ...issue, path: truePath }));
+            }
+            const doDefault = dispatchValidateValue(e.target, result, inputSchema, data, {
+                value: getPath(truePath, data),
+                path,
+                name
+            });
             if (!doDefault)
                 e.preventDefault();
             if (!result.success) {
                 e.preventDefault();
                 const errorSet = result.error.issues.reduce((issueSet, issue) => {
-                    const value = getDataPath(issue.path);
+                    const value = getPath(issue.path, data);
                     let name2 = "";
                     if (value != null && typeof value !== "object") {
                         name2 = issue.path.pop();
                     }
-                    const issueIndex = issueSet.findIndex(({ path: path2, name: setName }) => setName === name2 && path2.length === issue.path.length && path2.every((key, index) => key === issue.path[index]));
+                    const issuePathStr = issue.path.join(".");
+                    const issueIndex = issueSet.findIndex(({ path: path2, name: setName }) => setName === name2 && path2.join(".") === issuePathStr);
                     if (issueIndex < 0)
                         return [{ path: issue.path, issues: [issue], name: name2 }];
                     issueSet[issueIndex].issues.push(issue);
                     return issueSet;
                 }, []);
                 errorSet.forEach(({ path: path2, issues, name: name2 }) => {
-                    throwError(name2, path2, new z.ZodError(issues));
+                    allErrors = throwError(name2, path2, new z.ZodError(issues), Jnode, allErrors);
                 });
                 return;
             }
         });
-        errors = errors.filter((error) => error.errors.length > 0);
-    });
-    tick().then(() => {
-        errors.forEach(({ path }) => {
-            let name = path.pop();
-            const Jelement = Jnode.find(restrictPath(path, name ?? ""));
-            path.push(name);
-            let Jparent = Jelement.parent("[data-form-section-container]");
-            if (Jparent.length < 1) {
-                Jparent = Jelement.wrap(`<div data-form-section-container></div>`).parent("[data-form-section-container]");
+        allErrors = allErrors.filter((error) => error.errors.length > 0);
+        setPath(truePath, input, Jinputs);
+        if (input.attr("type") == "checkbox") {
+            if (existingValue != null && Array.isArray(existingValue)) {
+                const existingValueSelector = existingValue.reduce((acc, value2) => {
+                    return `${acc}, [value="${value2}"]`;
+                }, "");
+                input.filter(existingValueSelector).prop("checked", true);
+                setPath(truePath, existingValue, data);
+                return;
             }
-            if (Jparent.find("[data-form-error]").length < 1) {
-                Jparent.append(`<div data-form-error></div>`);
+            const value = input.filter(":checked").map((_, checkbox) => {
+                return checkbox.value;
+            });
+            setPath(truePath, value, data);
+            return;
+        }
+        if (input.attr("type") === "radio") {
+            const value = existingValue ?? input.filter(":checked").val();
+            setPath(truePath, value, data);
+            return;
+        }
+        if (input.length > 0) {
+            if (existingValue != null) {
+                input.val(existingValue);
+                setPath(truePath, existingValue, data);
+                return;
             }
-            Jparent.find("[data-form-error]").html(JerrorContainer.find(`[data-form-error-path=${path.join("-")}]`).html());
-        });
+            if (input[0].value === "" || isNaN(input[0].valueAsNumber)) {
+                setPath(truePath, void 0, data);
+                return;
+            }
+            const value = existingValue ?? input[0].valueAsNumber ?? input[0].valueAsDate ?? input[0].value;
+            setPath(truePath, value, data);
+            return;
+        }
     });
     return {
         destroy() {
-            Jnode.off("input");
-            Jnode.off("blur");
+            Jnode.off("submit");
+            for (let selector of inputSelectors) {
+                Jnode.off("input", selector);
+                Jnode.off("blur", selector);
+            }
         }
     };
 }
-function formInput(node) {
-    return {};
-}
-function formSection(node, name) {
-    if (name)
-        J(node).attr("data-form-section", name);
-}
-function formSectionContainer(node) {
-    J(node).attr("data-form-section-container", "");
-}
-function formError(node) {
-    J(node).attr("data-form-error", "");
-}
 $: {
-    errors = entry != null ? $page.form?.[entry]?.errors ?? [] : $page.form?.errors ?? [];
+    setAllErrors(entry != null ? $page.form?.[entry]?.errors ?? [] : $page.form?.errors ?? []);
 }
 $: (function inputUpdater(inputs, path = []) {
     for (let [key, Jinput] of Object.entries(inputs)) {
+        const truePath = [...path, key];
         if (typeof Jinput.val !== "function") {
-            inputUpdater(getInputPath([...path, key]), [...path, key]);
+            inputUpdater(getPath(truePath, Jinputs), truePath);
             continue;
         }
         let JinputNew = Jinput;
         if (["checkbox", "radio"].includes(JinputNew.filter("input").attr("type") ?? "")) {
-            const value2 = getDataPath([...path, key]);
+            const value2 = getPath(truePath, data);
             if (value2 != null)
                 JinputNew.filter(`[value="${value2}"]`).prop("checked", true);
             return;
         }
-        const value = getDataPath([...path, key]);
+        const value = getPath(truePath, data);
         if (value instanceof Date) {
             JinputNew[0].valueAsDate = value;
         }
@@ -415,33 +419,7 @@ $: (function inputUpdater(inputs, path = []) {
         }
     }
 })(Jinputs);
-$: {
-    if (formData != null) {
-        data = { ...formData, ...data };
-    }
-    else if (entry != null) {
-        if ($page.form?.data?.[entry] != null) {
-            data = { ...$page.form[entry], ...data };
-        }
-    }
-    else if ($page.form?.data != null) {
-        data = { ...$page.form.data, ...data };
-    }
-}
+$: invalidateData(formData, $page.form);
 </script>
 
-<slot {validation} {formInput} {formSection} {formSectionContainer} {formError} {names} />
-<div style:display="none" bind:this={errorContainer}>
-
-    {#each errors as error}
-        <div data-form-error-path={error.path.join("-")} data-form-error>
-            <slot name="error" error={error}>
-                <div>
-                    {#each error.errors as message}
-                        <p>{message}</p>
-                    {/each}
-                </div>
-            </slot>
-        </div>
-    {/each}
-</div>
+<slot {validation} {formInput} {names} {errors} FormError={FormErrorComponent} {values} />

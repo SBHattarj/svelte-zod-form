@@ -18,33 +18,77 @@
 <h1>Welcome to your library project</h1>
 <p>Create your package using @sveltejs/package and preview/showcase your work with SvelteKit</p>
 <p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation</p>
-<Form let:names realTime schema={z.object({
-    a: z.number(),
-    b: z.object({
-        c: z.number()
-    }),
-    c: z.string()
-})} errors={form?.errors ?? []}  let:validation let:formSection let:formSectionContainer let:formError let:formInput>
+<Form 
+    let:names 
+    realTime 
+    schema={z.object({
+        a: z.string(),
+        b: z.object({
+            c: z.number()
+        }),
+        c: z.string()
+    })}
+    allErrors={form?.errors ?? []}
+    let:validation
+    let:formInput
+    let:errors
+    let:FormError
+    let:values
+>
     <form use:validation method="post">
-        a<input type="number" name={names.a[Value]}>
-            <div use:formSectionContainer>
-                <div use:formError></div>
-                b<input type="number" name={names.b.c[Value]} use:formInput>
-            </div>
-        <div use:formSection={names.c[Value]}>
-            <div><label for="a">a</label><input name={names.c[Value]} id="a" type="radio" value="hello"></div>
-            <div><label for="b">b</label><input name={names.c[Value]} id="b" type="radio" value="hello bye"></div>
-            <div><label for="c">c</label><input name={names.c[Value]} id="c" type="radio" value="bye"></div>
+        <div>
+            a<input type="text" name={names.a[Value]} value={values.a}>
+            <FormError errors={errors.a} let:errors let:path >
+                <h2>Errors</h2>
+                <ul>
+                    {#each errors as error}
+                        <li>{error}</li>
+                    {/each}
+                </ul>
+            </FormError>
+        </div>
+        <div>
+            b.c<input type="number" name={names.b.c[Value]} use:formInput value={values.b.c}>
+            <FormError errors={errors.b.c} let:errors let:path>
+                <h2>Errors</h2>
+                <ul>
+                    {#each errors as error}
+                        <li>{error}</li>
+                    {/each}
+                </ul>
+            </FormError>
+        </div>
+        <div>
+            <div><label for="a">a</label><input
+                name={names?.c[Value]}
+                id="a"
+                type="radio"
+                value="hello"
+                checked={values?.c === "hello"}
+            ></div>
+            <div><label for="b">b</label><input
+                name={names.c[Value]}
+                id="b"
+                type="radio"
+                value="hello bye"
+                checked={values?.c === "hello bye"}
+            ></div>
+            <div><label for="c">c</label><input
+                name={names.c[Value]}
+                id="c"
+                type="radio"
+                value="bye"
+                checked={values?.c === "bye"}
+            ></div>
+            <FormError errors={errors.c} let:errors>
+                <h2>Errors</h2>
+                <ul>
+                    {#each errors as error}
+                        <li>{error}</li>
+                    {/each}
+                </ul>
+            </FormError>
         </div>
         <button>submit</button>
     </form>
-    <div slot="error" let:error>
-        <h2>Errors: </h2>
-        <ul>
-
-            {#each error.errors as message}
-                <li>{message}</li>
-            {/each}
-        </ul>
-    </div>
 </Form>

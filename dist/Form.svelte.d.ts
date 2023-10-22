@@ -1,8 +1,51 @@
+/// <reference types="jquery" />
+/// <reference types="jquery" />
 import { SvelteComponent } from "svelte";
-export declare const Value: unique symbol;
-import { z, type ZodObject, type ZodRawShape } from 'zod';
+import { z, type ZodObject, type ZodRawShape, type ZodTypeAny } from 'zod';
 import type { ActionReturn } from "svelte/action";
-import type { ValidateDataEvent, ValidateValueEvent, ValueTransformEvent } from './Form';
+import type { ValidateDataEvent, ValidateValueEvent, ValueTransformEvent, FormError } from './Form';
+export declare const Value: unique symbol;
+export declare const Errors: unique symbol;
+export declare const Path: unique symbol;
+export declare const All: unique symbol;
+export declare const HasErrors: unique symbol;
+export declare const HasErrorsWithin: unique symbol;
+export type namesType<T> = {
+    [key in keyof T]: (T[key] extends number | string | boolean ? {} : namesType<T[key]>) & {
+        [Value]: string;
+    };
+};
+export type errorsType<T> = (T extends number | string | boolean ? {} : {
+    [key in keyof T]: errorsType<T[key]>;
+}) & {
+    [Path]: string[];
+    [Errors]: string[];
+    [All]: FormError[];
+    [HasErrors]: boolean;
+    [HasErrorsWithin]: boolean;
+};
+export declare function restrictPath(path: readonly (string | number)[], name: string): string;
+export declare function setPath(pathGiven: readonly string[], value: any, data: Record<string, any>): Record<string, any>;
+export declare function getPath(path: readonly (string | number)[], data: Record<string, any>): any;
+export declare function loopOverZodObject<T extends ZodObject<ZodRawShape>>(object: T, cb?: (name: string, value: Readonly<ZodTypeAny>, path: readonly string[]) => void, path?: string[]): void;
+export declare function createNamesProxy<T extends ZodObject<ZodRawShape>>(name: string): namesType<z.infer<T>>;
+export declare function createErrorProxy<T extends ZodObject<ZodRawShape>>(path: string, errors: FormError[]): errorsType<z.infer<T>>;
+export declare function createValuesProxy<T extends Record<any, any>>(data: T, schema: z.ZodSchema): T;
+export declare function throwError(name: string, givenPath: readonly (string | number)[], error: z.ZodError, Jnode: JQuery<HTMLFormElement>, allErrors: FormError[]): FormError[];
+export declare function dispatchValidateValue(target: HTMLElement, result: {
+    success: boolean;
+    error?: z.ZodError;
+    data?: any;
+}, inputSchema: z.ZodSchema, data: unknown, details: {
+    value: any;
+    path: readonly string[];
+    name: string;
+}): boolean;
+export declare function formInput(_: HTMLInputElement): ActionReturn<[], {
+    "on:value-transform"?: ValueTransformEvent;
+    "on:validate-value"?: ValidateValueEvent;
+}>;
+import FormErrorComponent from "./FormError.svelte";
 declare class __sveltets_Render<T extends ZodObject<ZodRawShape>> {
     props(): {
         schema: T;
@@ -10,10 +53,7 @@ declare class __sveltets_Render<T extends ZodObject<ZodRawShape>> {
         formData?: Partial<z.TypeOf<T>> | null | undefined;
         entry?: PropertyKey | null | undefined;
         realTime?: boolean | undefined;
-        errors?: {
-            path: string[];
-            errors: string[];
-        }[] | undefined;
+        allErrors?: FormError[] | undefined;
     };
     events(): {} & {
         [evt: string]: CustomEvent<any>;
@@ -23,42 +63,11 @@ declare class __sveltets_Render<T extends ZodObject<ZodRawShape>> {
             validation: (node: HTMLFormElement) => ActionReturn<[], {
                 "on:validate-data"?: ValidateDataEvent<T> | undefined;
             }>;
-            formInput: (node: HTMLInputElement) => ActionReturn<[], {
-                "on:value-transform"?: ValueTransformEvent | undefined;
-                "on:validate-value"?: ValidateValueEvent | undefined;
-            }>;
-            formSection: (node: HTMLElement, name?: string | undefined) => void;
-            formSectionContainer: (node: HTMLElement) => void;
-            formError: (node: HTMLElement) => void;
-            names: z.TypeOf<T> extends infer T_1 ? { [key in keyof T_1]: (z.TypeOf<T>[key] extends string | number | boolean ? {} : z.TypeOf<T>[key] extends infer T_2 ? { [key_1 in keyof T_2]: (z.TypeOf<T>[key][key_1] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1] extends infer T_3 ? { [key_2 in keyof T_3]: (z.TypeOf<T>[key][key_1][key_2] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1][key_2] extends infer T_4 ? { [key_3 in keyof T_4]: (z.TypeOf<T>[key][key_1][key_2][key_3] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1][key_2][key_3] extends infer T_5 ? { [key_4 in keyof T_5]: (z.TypeOf<T>[key][key_1][key_2][key_3][key_4] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1][key_2][key_3][key_4] extends infer T_6 ? { [key_5 in keyof T_6]: (z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5] extends infer T_7 ? { [key_6 in keyof T_7]: (z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6] extends infer T_8 ? { [key_7 in keyof T_8]: (z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6][key_7] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6][key_7] extends infer T_9 ? { [key_8 in keyof T_9]: (z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6][key_7][key_8] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6][key_7][key_8] extends infer T_10 ? { [key_9 in keyof T_10]: (z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6][key_7][key_8][key_9] extends string | number | boolean ? {} : z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6][key_7][key_8][key_9] extends infer T_11 ? { [key_10 in keyof T_11]: (z.TypeOf<T>[key][key_1][key_2][key_3][key_4][key_5][key_6][key_7][key_8][key_9][key_10] extends string | number | boolean ? {} : any) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never) & {
-                [Value]: string;
-            }; } : never;
-        };
-        error: {
-            error: {
-                path: string[];
-                errors: string[];
-            };
+            formInput: typeof formInput;
+            names: namesType<z.TypeOf<T>>;
+            errors: errorsType<z.TypeOf<T>>;
+            FormError: typeof FormErrorComponent;
+            values: z.TypeOf<T>;
         };
     };
 }

@@ -22,3 +22,4 @@ export type ValidateDataEvent<T extends z.ZodObject<z.ZodRawShape>> = (e: Custom
         error: z.SafeParseError<T>
     }
 )>) => void
+export type FormError = {path: readonly (string | number)[], errors: string[]}
