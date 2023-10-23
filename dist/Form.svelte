@@ -387,6 +387,11 @@ function validation(node) {
                     return;
                 }
                 setPath(truePath, value2, data);
+                return;
+            }
+            if (input[0].value === "") {
+                setPath(truePath, void 0, data);
+                return;
             }
             const value = existingValue ?? input[0].valueAsDate ?? input[0].value;
             setPath(truePath, value, data);

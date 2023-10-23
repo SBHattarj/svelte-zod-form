@@ -595,6 +595,11 @@
                         return
                     }
                     setPath(truePath, value, data)
+                    return
+                }
+                if(input[0].value === "") {
+                    setPath(truePath, undefined, data)
+                    return
                 }
 
                 const value = existingValue ?? input[0].valueAsDate 
