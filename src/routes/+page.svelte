@@ -37,7 +37,7 @@
 >
     <form use:validation method="post">
         <div>
-            a<input type="text" name={names.a[Value]} value={values.a}>
+            a<input type="text" name={names.a[Value]} value={values.a || "a innitial value"}>
             <FormError errors={errors.a} let:errors let:path >
                 <h2>Errors</h2>
                 <ul>

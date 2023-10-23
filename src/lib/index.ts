@@ -149,8 +149,6 @@ export function zodAction<
                     data
                 }
             })
-            const failValue: any = fail(400, data)
-            console.log(failValue, failValue instanceof Error)
             return fail(400, {
                 success: false,
                 errors,

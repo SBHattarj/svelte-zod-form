@@ -79,8 +79,6 @@ export function zodAction({ schema, validate = () => true, action = () => ({}), 
                         data
                     }
                 });
-            const failValue = fail(400, data);
-            console.log(failValue, failValue instanceof Error);
             return fail(400, {
                 success: false,
                 errors,

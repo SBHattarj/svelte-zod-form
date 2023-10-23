@@ -307,7 +307,6 @@ function validation(node) {
                 });
                 allErrors = allErrors;
             }
-            console.log("hello");
             allErrors.forEach((error) => {
                 error.errors.length = 0;
             });
@@ -379,11 +378,15 @@ function validation(node) {
                 setPath(truePath, existingValue, data);
                 return;
             }
-            if (input[0].value === "" || isNaN(input[0].valueAsNumber)) {
-                setPath(truePath, void 0, data);
-                return;
+            if (input.attr("type") === "number") {
+                const value2 = existingValue ?? input[0].valueAsNumber;
+                if (isNaN(value2)) {
+                    setPath(truePath, void 0, data);
+                    return;
+                }
+                setPath(truePath, value2, data);
             }
-            const value = existingValue ?? input[0].valueAsNumber ?? input[0].valueAsDate ?? input[0].value;
+            const value = existingValue ?? input[0].valueAsDate ?? input[0].value;
             setPath(truePath, value, data);
             return;
         }

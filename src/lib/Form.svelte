@@ -477,7 +477,6 @@
                     })
                     allErrors = allErrors
                 }
-                console.log("hello")
                 allErrors.forEach(error => {
                     error.errors.length = 0
                 })
@@ -585,13 +584,16 @@
                     setPath(truePath, existingValue, data)
                     return
                 }
-
-                if(input[0].value === "" || isNaN(input[0].valueAsNumber)) {
-                    setPath(truePath, undefined, data)
-                    return
+                if(input.attr("type") === "number") {
+                    const value = existingValue ?? input[0].valueAsNumber
+                    if(isNaN(value)) {
+                        setPath(truePath, undefined, data)
+                        return
+                    }
+                    setPath(truePath, value, data)
                 }
-                const value = existingValue ?? input[0].valueAsNumber 
-                    ?? input[0].valueAsDate 
+
+                const value = existingValue ?? input[0].valueAsDate 
                     ?? input[0].value
 
                 setPath(truePath, value, data)

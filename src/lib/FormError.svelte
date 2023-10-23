@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { errorsType } from "./Form"
+    import type { errorsType } from "./Form.svelte"
     import { Errors, HasErrors, Path } from "./Form.svelte";
     type T = $$Generic<ZodObject<ZodRawShape>>
 
