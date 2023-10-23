@@ -3,6 +3,7 @@ import { z } from "zod";
 export { default } from "./Form.svelte";
 export { default as FormErrorComponent } from "./FormError.svelte";
 export * from "./Form.svelte";
+const ActionFailure = fail(Infinity).constructor;
 const primitives = [
     "Number",
     "Array",
@@ -71,26 +72,38 @@ export function zodAction({ schema, validate = () => true, action = () => ({}), 
                 throwError(name, path, new z.ZodError(issues), errors);
             });
             if (entry != null)
-                return {
+                return fail(400, {
                     [entry]: {
                         success: false,
-                        ...fail(400, data),
-                        errors
+                        errors,
+                        data
                     }
-                };
-            return {
+                });
+            const failValue = fail(400, data);
+            console.log(failValue, failValue instanceof Error);
+            return fail(400, {
                 success: false,
-                ...fail(400, data),
-                errors
-            };
+                errors,
+                data
+            });
         }
         let actionData = await action(args[0], result.data, formData);
-        if (actionData != null && actionData.success != null && !actionData.success) {
+        if (actionData instanceof ActionFailure) {
             if (entry != null)
-                return {
-                    [entry]: actionData
-                };
-            return actionData;
+                return fail(actionData.status ?? 400, {
+                    [entry]: {
+                        actionData: actionData.data,
+                        success: false,
+                        errors: actionData.data.errors,
+                        data: result.data
+                    }
+                });
+            return fail(actionData.status ?? 400, {
+                actionData: actionData.data,
+                success: false,
+                errors: actionData.data.errors,
+                data: result.data
+            });
         }
         if (entry != null)
             return {

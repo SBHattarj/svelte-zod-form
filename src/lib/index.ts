@@ -1,4 +1,4 @@
-import { fail, type Action } from "@sveltejs/kit"
+import { fail, type Action, type ActionFailure as ActionFailureType } from "@sveltejs/kit"
 import { z } from "zod"
 
 export {default} from "./Form.svelte"
@@ -6,6 +6,8 @@ export {default as FormErrorComponent} from "./FormError.svelte"
 export * from "./Form.svelte"
 
 export type {ValidateDataEvent, ValidateValueEvent, ValueTransformEvent} from "./Form"
+
+const ActionFailure = fail(Infinity).constructor as typeof ActionFailureType
 
 const primitives = [
     "Number",
@@ -52,7 +54,7 @@ function throwError(
 export function zodAction<
     T extends z.ZodSchema,
     ActionInput extends Record<string, any>,
-    OutputData extends void | Record<string, any> = void,
+    OutputData extends void | Record<string, any> & {data?: {errors?: {path: string[], errors: string[]}[]}} = void,
     Entry extends PropertyKey | undefined | null = null
 >(
     {
@@ -140,25 +142,37 @@ export function zodAction<
             errorSet.forEach(({path, issues, name}) => {
                 throwError(name, path as string[], new z.ZodError(issues), errors)
             })
-            if(entry != null) return {
+            if(entry != null) return fail(400, {
                 [entry]: {
                     success: false,
-                    ...fail(400, data),
-                    errors
+                    errors,
+                    data
                 }
-            }
-            return {
+            })
+            const failValue: any = fail(400, data)
+            console.log(failValue, failValue instanceof Error)
+            return fail(400, {
                 success: false,
-                ...fail(400, data),
-                errors
-            }
+                errors,
+                data
+            })
         }
         let actionData = await action(args[0], result.data, formData)
-        if(actionData != null && actionData.success != null && !actionData.success) {
-            if(entry != null) return {
-                [entry]: actionData
-            }
-            return actionData
+        if(actionData instanceof ActionFailure) {
+            if(entry != null) return fail(actionData.status ?? 400, {
+                [entry]: {
+                    actionData: actionData.data,
+                    success: false,
+                    errors: actionData.data.errors,
+                    data: result.data
+                }
+            })
+            return fail(actionData.status ?? 400, {
+                actionData: actionData.data,
+                success: false,
+                errors: actionData.data.errors,
+                data: result.data
+            })
         }
         if(entry != null) return {
             [entry]: {

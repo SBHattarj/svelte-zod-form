@@ -14,6 +14,7 @@
     }
     $: console.log("errors", errors)
     $: console.log(form?.data)
+    $: console.log(form)
 </script>
 <h1>Welcome to your library project</h1>
 <p>Create your package using @sveltejs/package and preview/showcase your work with SvelteKit</p>
