@@ -143,12 +143,14 @@ export function formInput(_) {
 
 <script>import { page } from "$app/stores";
 import FormErrorComponent from "./FormError.svelte";
+let pageData = $page;
+$: pageData = $page;
 export let schema;
 export let data = {};
 export let formData = null;
 export let entry = null;
 export let realTime = false;
-export let allErrors = entry != null ? $page.form?.[entry]?.errors ?? [] : $page.form?.errors ?? [];
+export let allErrors = entry != null ? pageData.form?.[entry]?.errors ?? [] : pageData.form?.errors ?? [];
 $: errors = createErrorProxy("", allErrors);
 const names = createNamesProxy("");
 $: values = createValuesProxy(data, schema);
@@ -156,28 +158,28 @@ let Jinputs = {};
 function setAllErrors(errors2) {
     allErrors = errors2;
 }
-function invalidateData(fomrData, pageData) {
+function invalidateData(fomrData, pageData2) {
     if (fomrData != null) {
         data = { ...fomrData, ...data };
         return;
     }
-    if (pageData == null)
+    if (pageData2 == null)
         return;
     if (entry == null) {
-        if (pageData.data == null)
+        if (pageData2.data == null)
             return;
-        data = { ...pageData.data, ...data };
+        data = { ...pageData2.data, ...data };
         return;
     }
-    if (pageData[entry]?.data != null) {
-        data = { ...pageData[entry].data, ...data };
+    if (pageData2[entry]?.data != null) {
+        data = { ...pageData2[entry].data, ...data };
         return;
     }
 }
-invalidateData(formData, $page.form);
+invalidateData(formData, pageData.form);
 function validation(node) {
     const Jnode = J(node);
-    invalidateData(formData, $page.form);
+    invalidateData(formData, pageData.form);
     Jnode.on("submit", (e) => {
         let result = schema.safeParse(data);
         const doDefault = node.dispatchEvent(new CustomEvent("validate-data", {
@@ -402,7 +404,7 @@ function validation(node) {
     };
 }
 $: {
-    setAllErrors(entry != null ? $page.form?.[entry]?.errors ?? [] : $page.form?.errors ?? []);
+    setAllErrors(entry != null ? pageData.form?.[entry]?.errors ?? [] : pageData.form?.errors ?? []);
 }
 $: (function inputUpdater(inputs, path = []) {
     for (let [key, Jinput] of Object.entries(inputs)) {
@@ -427,7 +429,7 @@ $: (function inputUpdater(inputs, path = []) {
         }
     }
 })(Jinputs);
-$: invalidateData(formData, $page.form);
+$: invalidateData(formData, pageData.form);
 </script>
 
 <slot {validation} {formInput} {names} {errors} FormError={FormErrorComponent} {values} />

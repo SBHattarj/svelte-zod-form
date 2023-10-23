@@ -235,14 +235,18 @@
     type T = $$Generic<ZodObject<ZodRawShape>>
 
 
+    let pageData = $page
+    $: pageData = $page
+
+
     export let schema: T
     export let data: z.infer<T> = {}
     export let formData: Partial<z.infer<T>> | null = null
     export let entry: PropertyKey | null | undefined = null
     export let realTime: boolean = false
     export let allErrors: FormError[] = entry != null 
-        ? $page.form?.[entry]?.errors ?? [] 
-        : $page.form?.errors ?? []
+        ? pageData.form?.[entry]?.errors ?? [] 
+        : pageData.form?.errors ?? []
 
 
 
@@ -274,12 +278,12 @@
             return
         }
     }
-    invalidateData(formData, $page.form)
+    invalidateData(formData, pageData.form)
     function validation(node: HTMLFormElement): ActionReturn<[], {
         "on:validate-data"?: ValidateDataEvent<T>
     }> {
         const Jnode = J<HTMLFormElement>(node)
-        invalidateData(formData, $page.form)
+        invalidateData(formData, pageData.form)
 
         Jnode.on("submit", e => {
             let result = schema.safeParse(data)
@@ -616,8 +620,8 @@
 
     $: {
         setAllErrors(entry != null
-            ? $page.form?.[entry]?.errors ?? []
-            : $page.form?.errors ?? [])
+            ? pageData.form?.[entry]?.errors ?? []
+            : pageData.form?.errors ?? [])
     }
 
     $: (function inputUpdater(inputs: typeof Jinputs, path: readonly string[] = []) {
@@ -644,7 +648,7 @@
         }
     })(Jinputs)
 
-    $: invalidateData(formData, $page.form)
+    $: invalidateData(formData, pageData.form)
 </script>
 
 <slot {validation} {formInput} {names} {errors} FormError={FormErrorComponent} {values} />
