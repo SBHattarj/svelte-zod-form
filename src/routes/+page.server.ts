@@ -11,15 +11,24 @@ export const actions: Actions = {
             }),
             c: z.string()
         }),
-        action: () => {
-            return fail(400, {
-                errors: [
-                    {
-                        path: ['a'],
-                        errors: ["This is 'a' test error"]
-                    }
-                ]
-            })
+        action(event) {
+            if(event.url.toString() == "/") {
+                return fail(400, {
+                    errors: [{
+                        path: [],
+                        errors: []
+                    }]
+                    
+                })
+            }
+            return {
+                data: {
+                    errors: [{
+                        path: [],
+                        errors: []
+                    }]
+                }
+            }
         }
     })
 }

@@ -54,7 +54,7 @@ function throwError(
 export function zodAction<
     T extends z.ZodSchema,
     ActionInput extends Record<string, any>,
-    OutputData extends void | Record<string, any> & {data?: {errors?: {path: string[], errors: string[]}[]}} = void,
+    OutputData extends void | {data?: {errors?: {path: string[], errors: string[]}[]}} = void,
     Entry extends PropertyKey | undefined | null = null
 >(
     {

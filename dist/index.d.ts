@@ -4,7 +4,7 @@ export { default } from "./Form.svelte";
 export { default as FormErrorComponent } from "./FormError.svelte";
 export * from "./Form.svelte";
 export type { ValidateDataEvent, ValidateValueEvent, ValueTransformEvent } from "./Form";
-export declare function zodAction<T extends z.ZodSchema, ActionInput extends Record<string, any>, OutputData extends void | Record<string, any> & {
+export declare function zodAction<T extends z.ZodSchema, ActionInput extends Record<string, any>, OutputData extends void | {
     data?: {
         errors?: {
             path: string[];
