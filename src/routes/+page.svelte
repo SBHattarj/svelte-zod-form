@@ -20,7 +20,6 @@
 <p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation</p>
 <Form 
     let:names 
-    realTime 
     schema={z.object({
         a: z.string(),
         b: z.object({

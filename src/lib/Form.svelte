@@ -477,6 +477,11 @@
                     })
                     allErrors = allErrors
                 }
+                console.log("hello")
+                allErrors.forEach(error => {
+                    error.errors.length = 0
+                })
+                allErrors = allErrors
             })
 
             Jnode.on("blur", inputSelector, (e) => {
