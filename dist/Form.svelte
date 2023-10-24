@@ -253,6 +253,11 @@ function validation(node) {
             return void 0;
         if (target.type === "number")
             return target.valueAsNumber;
+        if (target.type.startsWith("date") && isNaN(target.valueAsNumber))
+            return void 0;
+        if (target.type.startsWith("date")) {
+            return target.valueAsDate ?? new Date(target.value);
+        }
         return target.valueAsDate ?? target.value;
     }
     function getInputValue(target) {
@@ -416,11 +421,6 @@ function validation(node) {
             return;
         }
         if (input.length > 0) {
-            if (existingValue != null) {
-                input.val(existingValue);
-                setPath(truePath, existingValue, data);
-                return;
-            }
             if (input.attr("type") === "number") {
                 const value2 = existingValue ?? input[0].valueAsNumber;
                 if (isNaN(value2)) {
@@ -431,10 +431,23 @@ function validation(node) {
                 return;
             }
             if (input[0].value === "") {
-                setPath(truePath, void 0, data);
+                if (existingValue != null)
+                    input.attr("value", existingValue);
+                setPath(truePath, existingValue, data);
+                return;
+            }
+            if (input.attr("type")?.startsWith("date")) {
+                if (isNaN(input[0].valueAsNumber)) {
+                    input.val(existingValue);
+                    setPath(truePath, existingValue, data);
+                }
+                const value2 = existingValue ?? input[0].valueAsDate ?? new Date(input[0].value);
+                input.val(value2);
+                setPath(truePath, value2, data);
                 return;
             }
             const value = existingValue ?? input[0].valueAsDate ?? input[0].value;
+            input.val(value);
             setPath(truePath, value, data);
             return;
         }
@@ -491,6 +504,9 @@ $: (function inputUpdater(inputs, path = []) {
         }
         const value = getPath(truePath, data);
         if (value instanceof Date) {
+            if (JinputNew[0].valueAsDate == null) {
+                JinputNew[0].value = value.toString();
+            }
             JinputNew[0].valueAsDate = value;
         }
         else {
