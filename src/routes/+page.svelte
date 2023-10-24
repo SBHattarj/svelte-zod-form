@@ -13,8 +13,7 @@
         errors = form?.errors ?? [];
     }
     $: console.log("errors", errors)
-    $: console.log(form?.data)
-    $: console.log(form)
+    $: console.log("form", form)
 </script>
 <h1>Welcome to your library project</h1>
 <p>Create your package using @sveltejs/package and preview/showcase your work with SvelteKit</p>
@@ -26,7 +25,8 @@
         b: z.object({
             c: z.number()
         }),
-        c: z.string()
+        c: z.string(),
+        file: z.instanceof(File)
     })}
     allErrors={form?.errors ?? []}
     let:validation
@@ -35,7 +35,7 @@
     let:FormError
     let:values
 >
-    <form use:validation method="post">
+    <form enctype="multipart/form-data" use:validation method="post">
         <div>
             a<input type="text" name={names.a[Value]} value={values.a || "a innitial value"}>
             <FormError errors={errors.a} let:errors let:path >
@@ -88,6 +88,9 @@
                     {/each}
                 </ul>
             </FormError>
+        </div>
+        <div>
+            file<input name="file" type="file">
         </div>
         <button>submit</button>
     </form>

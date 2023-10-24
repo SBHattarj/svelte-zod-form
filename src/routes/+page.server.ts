@@ -9,7 +9,8 @@ export const actions: Actions = {
             b: z.object({
                 c: z.number().min(3).max(10)
             }),
-            c: z.string()
+            c: z.string(),
+            file: z.instanceof(File)
         }),
         action(event) {
             if(event.url.toString() == "/") {

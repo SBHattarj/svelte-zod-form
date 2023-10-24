@@ -223,6 +223,22 @@
     }> {
         return {}
     }
+
+    export type FileJson = {
+        text: string;
+        name: string;
+        type: string;
+    }
+    export function isFileJson(file: unknown): file is FileJson {
+        return typeof file === "object"
+            && file != null
+            && "text" in file
+            && "name" in file
+            && "type" in file
+            && typeof file.text === "string"
+            && typeof file.name === "string"
+            && typeof file.type === "string"
+    }
 </script>
 
 <script lang="ts">
@@ -365,6 +381,16 @@
                 const value = J<HTMLInputElement>(`input:checked[name="${target.name}"]`)[0].value
                 J(`input[name="${target.name}"][value="${value}"]`).prop("checked", true)
                 return value
+            }
+            if(target.type === "file") {
+                const files = target.files ?? []
+                J.each(Jnode.find<HTMLInputElement>(`input[name="${target.name}"]`), (_, input) => {
+                    input.files = target.files
+                })
+                if(target.multiple) {
+                    return [...files]
+                }
+                return files[0]
             }
             if(target.value === "") return undefined
             if(target.type === "number" && isNaN(target.valueAsNumber)) return undefined
@@ -582,6 +608,34 @@
                 setPath(truePath, value, data)
                 return
             }
+            if(input.attr("type") === "file") {
+                let value = existingValue ?? Array.from(input[0].files ?? [])
+                if(!Array.isArray(value)) {
+                    value = [value]
+                }
+                const container = new DataTransfer()
+                value = value.map((file: unknown) => {
+                    if(file instanceof File) {
+                        container.items.add(file)
+                        return file
+                    }
+                    if(isFileJson(file)) {
+                        const newFile = new File([file.text], file.name, {type: file.type})
+                        container.items.add(newFile)
+                        return newFile
+                    }
+                    return
+                }).filter((file: unknown) => file != null)
+                J.each(input, (_, i) => {
+                    i.files = container.files
+                })
+                if(!input[0].multiple) {
+                    setPath(truePath, value[0], data)
+                    return
+                }
+                setPath(truePath, value, data)
+                return
+            }
             if(input.length > 0) {
                 if(existingValue != null) {
                     input.val(existingValue)
@@ -639,8 +693,30 @@
             let JinputNew = Jinput as JQuery<HTMLInputElement>
             if(["checkbox", "radio"].includes(JinputNew.filter("input").attr("type") ?? "")) {
                 const value = getPath(truePath, data)
-                if(value != null)
+                if(value != null && !Array.isArray(value))
                     JinputNew.filter(`[value="${value}"]`).prop("checked", true)
+                if(Array.isArray(value)) value.forEach(v => JinputNew.filter(`[value="${v}"]`).prop("checked", true))
+                return
+            }
+            if(JinputNew.filter("input").attr("type") === "file") {
+                let value = getPath(truePath, data) as unknown[]
+                if(value == null) return
+                const container = new DataTransfer()
+                if(!Array.isArray(value)) {
+                    value = [value]
+                }
+                value.forEach((v: unknown) => {
+                    if(v instanceof File) {
+                        container.items.add(v)
+
+                        return
+                    }
+                    if(isFileJson(v)) {
+                        container.items.add(new File([v.text], v.name, { type: v.type}))
+                    }
+                    return null
+                })
+                JinputNew[0].files = container.files
                 return
             }
 

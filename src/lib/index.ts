@@ -142,6 +142,7 @@ export function zodAction<
             errorSet.forEach(({path, issues, name}) => {
                 throwError(name, path as string[], new z.ZodError(issues), errors)
             })
+            await sanitizeData(data)
             if(entry != null) return fail(400, {
                 [entry]: {
                     success: false,
@@ -156,6 +157,8 @@ export function zodAction<
             })
         }
         let actionData = await action(args[0], result.data, formData)
+        await sanitizeData(actionData)
+        await sanitizeData(result.data)
         if(actionData instanceof ActionFailure) {
             if(entry != null) return fail(actionData.status ?? 400, {
                 [entry]: {
@@ -183,6 +186,86 @@ export function zodAction<
             data: result.data,
             actionData,
             success: true
+        }
+    }
+}
+
+async function sanitizeData(data: any) {
+    if(data == null) return data
+    if(typeof data === "bigint") return data.toString()
+    if(typeof data !== "object") return data
+    const prevObjects: any[] = []
+    const prevIndecies = []
+    let currentObject = data;
+    while(currentObject != null) {
+        if(prevIndecies.length <= prevObjects.length) {
+            prevIndecies.push(0)
+        }
+        let lastElement = prevIndecies.length - 1
+        if(Array.isArray(currentObject)) {
+            if(prevIndecies[lastElement] >= currentObject.length) {
+                currentObject = prevObjects.pop()
+                prevIndecies.pop()
+                continue
+            }
+            let currIndex = prevIndecies[lastElement]++
+            let newCurrentObject = currentObject[currIndex]
+            if(newCurrentObject instanceof File) {
+                const fr = new FileReader()
+                const url = await new Promise(resolve => {
+                    fr.onload = () => resolve(fr.result)
+                    fr.readAsDataURL(newCurrentObject)
+                })
+                currentObject[currIndex] = {
+                    url,
+                    name: newCurrentObject.name,
+                    type: newCurrentObject.type,
+                }
+                continue
+            }
+            if(typeof newCurrentObject == "bigint") {
+                currentObject[currIndex] = newCurrentObject.toString()
+                continue
+            }
+            if(newCurrentObject == null) {
+                delete currentObject[currIndex]
+            }
+            if(typeof newCurrentObject === "object") {
+                prevObjects.push(currentObject)
+                prevIndecies.push(0)
+                currentObject = newCurrentObject
+                continue
+            }
+            continue
+        }
+        let currentKeys = Object.keys(currentObject)
+        if(prevIndecies[lastElement] >= currentKeys.length) {
+            currentObject = prevObjects.pop()
+            prevIndecies.pop()
+            continue
+        }
+        let currentKey = currentKeys[prevIndecies[lastElement]++]
+        let newCurrentObject = currentObject[currentKey]
+        if(newCurrentObject instanceof File) {
+            currentObject[currentKey] = {
+                text: await newCurrentObject.text(),
+                name: newCurrentObject.name,
+                type: newCurrentObject.type,
+            }
+            continue
+        }
+        if(typeof newCurrentObject == "bigint") {
+            currentObject[currentKey] = newCurrentObject.toString()
+            continue
+        }
+        if(newCurrentObject == null) {
+            delete currentObject[currentKey]
+        }
+        if(typeof newCurrentObject === "object") {
+            prevObjects.push(currentObject)
+            prevIndecies.push(0)
+            currentObject = newCurrentObject
+            continue
         }
     }
 }

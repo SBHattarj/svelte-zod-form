@@ -45,6 +45,12 @@ export declare function formInput(_: HTMLInputElement): ActionReturn<[], {
     "on:value-transform"?: ValueTransformEvent;
     "on:validate-value"?: ValidateValueEvent;
 }>;
+export type FileJson = {
+    text: string;
+    name: string;
+    type: string;
+};
+export declare function isFileJson(file: unknown): file is FileJson;
 import FormErrorComponent from "./FormError.svelte";
 declare class __sveltets_Render<T extends ZodObject<ZodRawShape>> {
     props(): {
