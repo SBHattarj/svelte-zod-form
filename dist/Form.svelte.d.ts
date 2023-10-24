@@ -19,7 +19,7 @@ export type errorsType<T> = (T extends number | string | boolean ? {} : {
     [key in keyof T]: errorsType<T[key]>;
 }) & {
     [Path]: string[];
-    [Errors]: string[];
+    [Errors]: Set<string>;
     [All]: FormError[];
     [HasErrors]: boolean;
     [HasErrorsWithin]: boolean;
