@@ -33,94 +33,6 @@ function throwError(name, givenPath, error, errors) {
     errors[errorIndex].errors = error.issues.map(value => value.message);
     return errors;
 }
-export function zodAction({ schema, validate = () => true, action = () => ({}), entry }) {
-    return async function (...args) {
-        const formData = await args[0].request.formData();
-        const data = entriesToNestedObject(formData, schema);
-        let result = schema.safeParse(data);
-        let isValid = validate({
-            data,
-            ...result,
-            revalidate() {
-                result = schema.safeParse(data);
-            },
-            throwError(error) {
-                result.success = false;
-                if (!result.success)
-                    result.error = error;
-            },
-            schema
-        });
-        result.success = isValid && result.success;
-        if (!result.success) {
-            let errors = [];
-            const errorSet = result.error.issues.reduce(((issueSet, issue) => {
-                const value = getDataPath(data, issue.path);
-                let name = "";
-                if (value != null && typeof value !== 'object') {
-                    name = issue.path.pop();
-                }
-                const issueIndex = issueSet.findIndex(({ path, name: setName }) => setName === name
-                    && path.length === issue.path.length
-                    && path.every((key, index) => key === issue.path[index]));
-                if (issueIndex < 0)
-                    return [{ path: issue.path, issues: [issue], name }];
-                issueSet[issueIndex].issues.push(issue);
-                return issueSet;
-            }), []);
-            errorSet.forEach(({ path, issues, name }) => {
-                throwError(name, path, new z.ZodError(issues), errors);
-            });
-            await sanitizeData(data);
-            if (entry != null)
-                return fail(400, {
-                    [entry]: {
-                        success: false,
-                        errors,
-                        data
-                    }
-                });
-            return fail(400, {
-                success: false,
-                errors,
-                data
-            });
-        }
-        let actionData = await action(args[0], result.data, formData);
-        await sanitizeData(actionData);
-        await sanitizeData(result.data);
-        if (actionData instanceof ActionFailure) {
-            if (entry != null)
-                return fail(actionData.status ?? 400, {
-                    [entry]: {
-                        actionData: actionData.data,
-                        success: false,
-                        errors: actionData.data.errors,
-                        data: result.data
-                    }
-                });
-            return fail(actionData.status ?? 400, {
-                actionData: actionData.data,
-                success: false,
-                errors: actionData.data.errors,
-                data: result.data
-            });
-        }
-        if (entry != null)
-            return {
-                [entry]: {
-                    success: true,
-                    data: result.data,
-                    actionData
-                }
-            };
-        return {
-            data: result.data,
-            actionData,
-            success: true
-        };
-    };
-}
 async function sanitizeData(data) {
     if (data == null)
         return data;
@@ -205,6 +117,8 @@ async function sanitizeData(data) {
 }
 function entriesToNestedObject(entries, schema) {
     const serialized = Object.fromEntries([...[...entries].reduce((acc, [key, value]) => {
+            if (value == null || value === "")
+                return acc;
             if (key.includes(".")) {
                 const [head, ...tail] = key.split(".");
                 if (!acc.has(head)) {
@@ -322,4 +236,128 @@ function entriesToNestedObject(entries, schema) {
         return Object.values(serialized);
     }
     return serialized;
+}
+export const IntlDateTimeFormatter = Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h24",
+});
+export const DateTimeFormatRegex = /([0-9]+)\/([0-9]+)\/([0=9]+),\s([0-9]+):([0-9]+)/;
+export function date(date) {
+    if (date !== "") {
+        return IntlDateTimeFormatter.format(new Date(date)).replace(DateTimeFormatRegex, "$3-$1-$2");
+    }
+    return "";
+}
+export function datetime(date) {
+    if (date !== "") {
+        return IntlDateTimeFormatter.format(new Date(date)).replace(DateTimeFormatRegex, "$3-$1-$2T$4:$5");
+    }
+    return "";
+}
+const formatterMap = {
+    $Y: "$3",
+    $M: "$1",
+    $D: "$2",
+    $H: "$4",
+    $m: "$5",
+};
+const formatMapEntries = Object.entries(formatterMap);
+export function dateFormat(date, format) {
+    format = formatMapEntries.reduce((format, [replacer, replaced]) => format.replace(new RegExp(replacer, "g"), replaced), format);
+    if (date !== "") {
+        return IntlDateTimeFormatter.format(new Date(date)).replace(DateTimeFormatRegex, format);
+    }
+    return "";
+}
+export function zodAction({ schema, validate = () => true, action = () => ({}), entry }) {
+    return async function (...args) {
+        const formData = await args[0].request.formData();
+        const data = entriesToNestedObject(formData, schema);
+        let result = schema.safeParse(data);
+        let isValid = validate({
+            data,
+            ...result,
+            revalidate() {
+                result = schema.safeParse(data);
+            },
+            throwError(error) {
+                result.success = false;
+                if (!result.success)
+                    result.error = error;
+            },
+            schema
+        });
+        result.success = isValid && result.success;
+        if (!result.success) {
+            let errors = [];
+            const errorSet = result.error.issues.reduce(((issueSet, issue) => {
+                const value = getDataPath(data, issue.path);
+                let name = "";
+                if (value != null && typeof value !== 'object') {
+                    name = issue.path.pop();
+                }
+                const issueIndex = issueSet.findIndex(({ path, name: setName }) => setName === name
+                    && path.length === issue.path.length
+                    && path.every((key, index) => key === issue.path[index]));
+                if (issueIndex < 0)
+                    return [{ path: issue.path, issues: [issue], name }];
+                issueSet[issueIndex].issues.push(issue);
+                return issueSet;
+            }), []);
+            errorSet.forEach(({ path, issues, name }) => {
+                throwError(name, path, new z.ZodError(issues), errors);
+            });
+            await sanitizeData(data);
+            if (entry != null)
+                return fail(400, {
+                    [entry]: {
+                        success: false,
+                        errors,
+                        data
+                    }
+                });
+            return fail(400, {
+                success: false,
+                errors,
+                data
+            });
+        }
+        let actionData = await action(args[0], result.data, formData);
+        await sanitizeData(actionData);
+        await sanitizeData(result.data);
+        if (actionData instanceof ActionFailure) {
+            if (entry != null)
+                return fail(actionData.status ?? 400, {
+                    [entry]: {
+                        actionData: actionData.data,
+                        success: false,
+                        errors: actionData.data.errors,
+                        data: result.data
+                    }
+                });
+            return fail(actionData.status ?? 400, {
+                actionData: actionData.data,
+                success: false,
+                errors: actionData.data.errors,
+                data: result.data
+            });
+        }
+        if (entry != null)
+            return {
+                [entry]: {
+                    success: true,
+                    data: result.data,
+                    actionData
+                }
+            };
+        return {
+            data: result.data,
+            actionData,
+            success: true
+        };
+    };
 }

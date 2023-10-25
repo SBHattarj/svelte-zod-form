@@ -51,6 +51,269 @@ function throwError(
     errors[errorIndex].errors = error.issues.map(value => value.message)
     return errors
 }
+
+
+async function sanitizeData(data: any) {
+    if(data == null) return data
+    if(typeof data === "bigint") return data.toString()
+    if(typeof data !== "object") return data
+    const prevObjects: any[] = []
+    const prevIndecies = []
+    let currentObject = data;
+    while(currentObject != null) {
+        if(prevIndecies.length <= prevObjects.length) {
+            prevIndecies.push(0)
+        }
+        let lastElement = prevIndecies.length - 1
+        if(Array.isArray(currentObject)) {
+            if(prevIndecies[lastElement] >= currentObject.length) {
+                currentObject = prevObjects.pop()
+                prevIndecies.pop()
+                continue
+            }
+            let currIndex = prevIndecies[lastElement]++
+            let newCurrentObject = currentObject[currIndex]
+            if(newCurrentObject instanceof File) {
+                const fr = new FileReader()
+                const url = await new Promise(resolve => {
+                    fr.onload = () => resolve(fr.result)
+                    fr.readAsDataURL(newCurrentObject)
+                })
+                currentObject[currIndex] = {
+                    url,
+                    name: newCurrentObject.name,
+                    type: newCurrentObject.type,
+                }
+                continue
+            }
+            if(typeof newCurrentObject == "bigint") {
+                currentObject[currIndex] = newCurrentObject.toString()
+                continue
+            }
+            if(newCurrentObject == null) {
+                delete currentObject[currIndex]
+            }
+            if(typeof newCurrentObject === "object") {
+                prevObjects.push(currentObject)
+                prevIndecies.push(0)
+                currentObject = newCurrentObject
+                continue
+            }
+            continue
+        }
+        let currentKeys = Object.keys(currentObject)
+        if(prevIndecies[lastElement] >= currentKeys.length) {
+            currentObject = prevObjects.pop()
+            prevIndecies.pop()
+            continue
+        }
+        let currentKey = currentKeys[prevIndecies[lastElement]++]
+        let newCurrentObject = currentObject[currentKey]
+        if(newCurrentObject instanceof File) {
+            currentObject[currentKey] = {
+                text: await newCurrentObject.text(),
+                name: newCurrentObject.name,
+                type: newCurrentObject.type,
+            }
+            continue
+        }
+        if(typeof newCurrentObject == "bigint") {
+            currentObject[currentKey] = newCurrentObject.toString()
+            continue
+        }
+        if(newCurrentObject == null) {
+            delete currentObject[currentKey]
+        }
+        if(typeof newCurrentObject === "object") {
+            prevObjects.push(currentObject)
+            prevIndecies.push(0)
+            currentObject = newCurrentObject
+            continue
+        }
+    }
+}
+
+
+function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSchema): any {
+    const serialized = Object.fromEntries([...[...entries].reduce((acc, [key, value]) => {
+        if(value == null || value === "") return acc
+        if(key.includes(".")) {
+            const [head, ...tail] = key.split(".")
+            if(!acc.has(head)) {
+                acc.set(head, {
+                    main: [],
+                    [objectToBe]: true
+                })
+            }
+            acc.get(head)?.main?.push([tail, value])
+            return acc
+        }
+        if(acc.has(key) && !Array.isArray(acc.get(key))) {
+            value = [value]
+            value.push(acc.get(key))
+            acc.set(key, value)
+            if(schema instanceof z.ZodArray) {
+                let type = schema._def.type
+                if(type instanceof z.ZodType) {
+                    value = value.map((ell: any) => {
+                        let typeName: 
+                            typeof primitives[number]
+                            | "Map"
+                            | "Set"
+                            | "Date" = type._def.typeName.replace("Zod", "")
+
+                        try {
+                            if(typeName == "Map") {
+                                value = new Map(value)
+                            }
+                            else if(typeName == "Set") {
+                                value = new Set(value)
+                            } 
+                            else if(typeName == "Date") {
+                                value = new Date(value)
+                            }
+                            else if(primitives.includes(typeName)) {
+                                value = globalThis[typeName]?.(value)
+                            }
+                        } catch {
+                        } finally {
+                            return ell
+                        }
+                    })
+                }
+            }
+            return acc
+        }
+        if(acc.has(key)) {
+            if(schema instanceof z.ZodArray) {
+                let type = schema._def.type
+                if(type instanceof z.ZodType) {
+                    let typeName: 
+                        typeof primitives[number]
+                        | "Map"
+                        | "Set"
+                        | "Date" = type._def.typeName.replace("Zod", "")
+                    try {
+                        if(typeName == "Map") {
+                            value = new Map(value)
+                        }
+                        else if(typeName == "Set") {
+                            value = new Set(value)
+                        } 
+                        else if(typeName == "Date") {
+                            value = new Date(value)
+                        }
+                        else if(primitives.includes(typeName)) {
+                            value = globalThis[typeName]?.(value)
+                        }
+                    } catch {
+                    }
+                }
+            }
+            acc.get(key)?.push(value)
+            return acc
+        }
+        if(schema instanceof z.ZodObject) {
+            let type: unknown = schema?._def.shape()?.[key]
+            if(type instanceof z.ZodType) {
+                let typeName: 
+                    typeof primitives[number]
+                    | "Map"
+                    | "Set"
+                    | "Date" = type._def.typeName.replace("Zod", "")
+                try {
+                    if(typeName == "Map") {
+                        value = new Map(value)
+                    }
+                    else if(typeName == "Set") {
+                        value = new Set(value)
+                    } 
+                    else if(typeName == "Date") {
+                        value = new Date(value)
+                    }
+                    else if(primitives.includes(typeName)) {
+                        value = globalThis[typeName]?.(value)
+                    }
+                } catch {
+                }
+            }
+        }
+        acc.set(key, value)
+        return acc
+    }, new Map())].map(([key, value]) => {
+        if(value[objectToBe]) {
+            const integerKey = parseInt(key)
+            if(integerKey.toString().length === key.length && !isNaN(integerKey)) {
+                return [integerKey, value.main]
+            }
+            if(schema instanceof z.ZodObject) {
+                let shape: unknown = schema._def.shape()[key]
+                if(shape instanceof z.ZodType) {
+                    return [key, entriesToNestedObject(value.main, shape)]
+                }
+                if(shape == null) {
+                    return [key, entriesToNestedObject(value.main, schema)]
+                }
+                return [key, value.main]
+            }
+        }
+        return [key, value]
+    }))
+    if(Object.keys(serialized).every(key => typeof key === "number")) {
+        return Object.values(serialized)
+    }
+    return serialized
+}
+
+
+
+
+export const IntlDateTimeFormatter = Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h24",
+})
+export const DateTimeFormatRegex = /([0-9]+)\/([0-9]+)\/([0=9]+),\s([0-9]+):([0-9]+)/
+
+
+
+export function date(date: string | Date) {
+    if(date !== "") {
+        return IntlDateTimeFormatter.format(new Date(date)).replace(DateTimeFormatRegex, "$3-$1-$2")
+    }
+    return ""
+}
+export function datetime(date: string | Date) {
+    if(date !== "") {
+        return IntlDateTimeFormatter.format(new Date(date)).replace(DateTimeFormatRegex, "$3-$1-$2T$4:$5")
+    }
+    return ""
+}
+
+const formatterMap = {
+    $Y: "$3",
+    $M: "$1",
+    $D: "$2",
+    $H: "$4",
+    $m: "$5",
+}
+const formatMapEntries = Object.entries(formatterMap)
+
+export function dateFormat(date: string | Date, format: string) {
+    format = formatMapEntries.reduce(
+        (format, [replacer, replaced]) => format.replace(new RegExp(replacer, "g"), replaced),
+        format
+    )
+    if(date !== "") {
+        return IntlDateTimeFormatter.format(new Date(date)).replace(DateTimeFormatRegex, format)
+    }
+    return ""
+}
+
+
 export function zodAction<
     T extends z.ZodSchema,
     ActionInput extends Record<string, any>,
@@ -190,212 +453,6 @@ export function zodAction<
     }
 }
 
-async function sanitizeData(data: any) {
-    if(data == null) return data
-    if(typeof data === "bigint") return data.toString()
-    if(typeof data !== "object") return data
-    const prevObjects: any[] = []
-    const prevIndecies = []
-    let currentObject = data;
-    while(currentObject != null) {
-        if(prevIndecies.length <= prevObjects.length) {
-            prevIndecies.push(0)
-        }
-        let lastElement = prevIndecies.length - 1
-        if(Array.isArray(currentObject)) {
-            if(prevIndecies[lastElement] >= currentObject.length) {
-                currentObject = prevObjects.pop()
-                prevIndecies.pop()
-                continue
-            }
-            let currIndex = prevIndecies[lastElement]++
-            let newCurrentObject = currentObject[currIndex]
-            if(newCurrentObject instanceof File) {
-                const fr = new FileReader()
-                const url = await new Promise(resolve => {
-                    fr.onload = () => resolve(fr.result)
-                    fr.readAsDataURL(newCurrentObject)
-                })
-                currentObject[currIndex] = {
-                    url,
-                    name: newCurrentObject.name,
-                    type: newCurrentObject.type,
-                }
-                continue
-            }
-            if(typeof newCurrentObject == "bigint") {
-                currentObject[currIndex] = newCurrentObject.toString()
-                continue
-            }
-            if(newCurrentObject == null) {
-                delete currentObject[currIndex]
-            }
-            if(typeof newCurrentObject === "object") {
-                prevObjects.push(currentObject)
-                prevIndecies.push(0)
-                currentObject = newCurrentObject
-                continue
-            }
-            continue
-        }
-        let currentKeys = Object.keys(currentObject)
-        if(prevIndecies[lastElement] >= currentKeys.length) {
-            currentObject = prevObjects.pop()
-            prevIndecies.pop()
-            continue
-        }
-        let currentKey = currentKeys[prevIndecies[lastElement]++]
-        let newCurrentObject = currentObject[currentKey]
-        if(newCurrentObject instanceof File) {
-            currentObject[currentKey] = {
-                text: await newCurrentObject.text(),
-                name: newCurrentObject.name,
-                type: newCurrentObject.type,
-            }
-            continue
-        }
-        if(typeof newCurrentObject == "bigint") {
-            currentObject[currentKey] = newCurrentObject.toString()
-            continue
-        }
-        if(newCurrentObject == null) {
-            delete currentObject[currentKey]
-        }
-        if(typeof newCurrentObject === "object") {
-            prevObjects.push(currentObject)
-            prevIndecies.push(0)
-            currentObject = newCurrentObject
-            continue
-        }
-    }
-}
 
-function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSchema): any {
-    const serialized = Object.fromEntries([...[...entries].reduce((acc, [key, value]) => {
-        if(key.includes(".")) {
-            const [head, ...tail] = key.split(".")
-            if(!acc.has(head)) {
-                acc.set(head, {
-                    main: [],
-                    [objectToBe]: true
-                })
-            }
-            acc.get(head)?.main?.push([tail, value])
-            return acc
-        }
-        if(acc.has(key) && !Array.isArray(acc.get(key))) {
-            value = [value]
-            value.push(acc.get(key))
-            acc.set(key, value)
-            if(schema instanceof z.ZodArray) {
-                let type = schema._def.type
-                if(type instanceof z.ZodType) {
-                    value = value.map((ell: any) => {
-                        let typeName: 
-                            typeof primitives[number]
-                            | "Map"
-                            | "Set"
-                            | "Date" = type._def.typeName.replace("Zod", "")
 
-                        try {
-                            if(typeName == "Map") {
-                                value = new Map(value)
-                            }
-                            else if(typeName == "Set") {
-                                value = new Set(value)
-                            } 
-                            else if(typeName == "Date") {
-                                value = new Date(value)
-                            }
-                            else if(primitives.includes(typeName)) {
-                                value = globalThis[typeName]?.(value)
-                            }
-                        } catch {
-                        } finally {
-                            return ell
-                        }
-                    })
-                }
-            }
-            return acc
-        }
-        if(acc.has(key)) {
-            if(schema instanceof z.ZodArray) {
-                let type = schema._def.type
-                if(type instanceof z.ZodType) {
-                    let typeName: 
-                        typeof primitives[number]
-                        | "Map"
-                        | "Set"
-                        | "Date" = type._def.typeName.replace("Zod", "")
-                    try {
-                        if(typeName == "Map") {
-                            value = new Map(value)
-                        }
-                        else if(typeName == "Set") {
-                            value = new Set(value)
-                        } 
-                        else if(typeName == "Date") {
-                            value = new Date(value)
-                        }
-                        else if(primitives.includes(typeName)) {
-                            value = globalThis[typeName]?.(value)
-                        }
-                    } catch {
-                    }
-                }
-            }
-            acc.get(key)?.push(value)
-            return acc
-        }
-        if(schema instanceof z.ZodObject) {
-            let type: unknown = schema?._def.shape()?.[key]
-            if(type instanceof z.ZodType) {
-                let typeName: 
-                    typeof primitives[number]
-                    | "Map"
-                    | "Set"
-                    | "Date" = type._def.typeName.replace("Zod", "")
-                try {
-                    if(typeName == "Map") {
-                        value = new Map(value)
-                    }
-                    else if(typeName == "Set") {
-                        value = new Set(value)
-                    } 
-                    else if(typeName == "Date") {
-                        value = new Date(value)
-                    }
-                    else if(primitives.includes(typeName)) {
-                        value = globalThis[typeName]?.(value)
-                    }
-                } catch {
-                }
-            }
-        }
-        acc.set(key, value)
-        return acc
-    }, new Map())].map(([key, value]) => {
-        if(value[objectToBe]) {
-            const integerKey = parseInt(key)
-            if(integerKey.toString().length === key.length && !isNaN(integerKey)) {
-                return [integerKey, value.main]
-            }
-            if(schema instanceof z.ZodObject) {
-                let shape: unknown = schema._def.shape()[key]
-                if(shape instanceof z.ZodType) {
-                    return [key, entriesToNestedObject(value.main, shape)]
-                }
-                if(shape == null) {
-                    return [key, entriesToNestedObject(value.main, schema)]
-                }
-                return [key, value.main]
-            }
-        }
-        return [key, value]
-    }))
-    if(Object.keys(serialized).every(key => typeof key === "number")) {
-        return Object.values(serialized)
-    }
-    return serialized
-}
+

@@ -4,6 +4,11 @@ export { default } from "./Form.svelte";
 export { default as FormErrorComponent } from "./FormError.svelte";
 export * from "./Form.svelte";
 export type { ValidateDataEvent, ValidateValueEvent, ValueTransformEvent } from "./Form";
+export declare const IntlDateTimeFormatter: Intl.DateTimeFormat;
+export declare const DateTimeFormatRegex: RegExp;
+export declare function date(date: string | Date): string;
+export declare function datetime(date: string | Date): string;
+export declare function dateFormat(date: string | Date, format: string): string;
 export declare function zodAction<T extends z.ZodSchema, ActionInput extends Record<string, any>, OutputData extends void | {
     data?: {
         errors?: {

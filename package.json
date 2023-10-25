@@ -1,6 +1,6 @@
 {
 	"name": "svelte-zod-form",
-	"version": "2.2.0b",
+	"version": "2.2.1",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run package",
