@@ -245,7 +245,7 @@ export const IntlDateTimeFormatter = Intl.DateTimeFormat("en-US", {
     minute: "numeric",
     hourCycle: "h24",
 });
-export const DateTimeFormatRegex = /([0-9]+)\/([0-9]+)\/([0=9]+),\s([0-9]+):([0-9]+)/;
+export const DateTimeFormatRegex = /([0-9]+)\/([0-9]+)\/([0-9]+),\s([0-9]+):([0-9]+)/;
 export function date(date) {
     if (date !== "") {
         return IntlDateTimeFormatter.format(new Date(date)).replace(DateTimeFormatRegex, "$3-$1-$2");
