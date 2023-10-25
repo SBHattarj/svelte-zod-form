@@ -115,6 +115,12 @@ async function sanitizeData(data) {
         }
     }
 }
+function getTypeName(type) {
+    if ("innerType" in type._def.innerType) {
+        return type._def.innerType._def.typeName;
+    }
+    return type._def.typeName;
+}
 function entriesToNestedObject(entries, schema) {
     const serialized = Object.fromEntries([...[...entries].reduce((acc, [key, value]) => {
             if (value == null || value === "")
@@ -137,8 +143,9 @@ function entriesToNestedObject(entries, schema) {
                 if (schema instanceof z.ZodArray) {
                     let type = schema._def.type;
                     if (type instanceof z.ZodType) {
+                        let a;
                         value = value.map((ell) => {
-                            let typeName = type._def.typeName.replace("Zod", "");
+                            let typeName = getTypeName(type).replace("Zod", "");
                             try {
                                 if (typeName == "Map") {
                                     value = new Map(value);
@@ -167,7 +174,7 @@ function entriesToNestedObject(entries, schema) {
                 if (schema instanceof z.ZodArray) {
                     let type = schema._def.type;
                     if (type instanceof z.ZodType) {
-                        let typeName = type._def.typeName.replace("Zod", "");
+                        let typeName = getTypeName(type).replace("Zod", "");
                         try {
                             if (typeName == "Map") {
                                 value = new Map(value);
@@ -192,7 +199,7 @@ function entriesToNestedObject(entries, schema) {
             if (schema instanceof z.ZodObject) {
                 let type = schema?._def.shape()?.[key];
                 if (type instanceof z.ZodType) {
-                    let typeName = type._def.typeName.replace("Zod", "");
+                    let typeName = getTypeName(type).replace("Zod", "");
                     try {
                         if (typeName == "Map") {
                             value = new Map(value);

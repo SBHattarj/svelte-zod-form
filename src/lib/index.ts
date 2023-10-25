@@ -133,6 +133,12 @@ async function sanitizeData(data: any) {
     }
 }
 
+function getTypeName(type: any) {
+    if("innerType" in type._def.innerType) {
+        return type._def.innerType._def.typeName
+    }
+    return type._def.typeName
+}
 
 function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSchema): any {
     const serialized = Object.fromEntries([...[...entries].reduce((acc, [key, value]) => {
@@ -155,12 +161,12 @@ function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSche
             if(schema instanceof z.ZodArray) {
                 let type = schema._def.type
                 if(type instanceof z.ZodType) {
+                    let a: z.ZodType;
                     value = value.map((ell: any) => {
                         let typeName: 
-                            typeof primitives[number]
-                            | "Map"
+                            typeof primitives[number] | "Map"
                             | "Set"
-                            | "Date" = type._def.typeName.replace("Zod", "")
+                            | "Date" = getTypeName(type).replace("Zod", "")
 
                         try {
                             if(typeName == "Map") {
@@ -189,10 +195,9 @@ function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSche
                 let type = schema._def.type
                 if(type instanceof z.ZodType) {
                     let typeName: 
-                        typeof primitives[number]
-                        | "Map"
+                        typeof primitives[number] | "Map"
                         | "Set"
-                        | "Date" = type._def.typeName.replace("Zod", "")
+                        | "Date" = getTypeName(type).replace("Zod", "")
                     try {
                         if(typeName == "Map") {
                             value = new Map(value)
@@ -216,11 +221,10 @@ function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSche
         if(schema instanceof z.ZodObject) {
             let type: unknown = schema?._def.shape()?.[key]
             if(type instanceof z.ZodType) {
-                let typeName: 
-                    typeof primitives[number]
-                    | "Map"
-                    | "Set"
-                    | "Date" = type._def.typeName.replace("Zod", "")
+                    let typeName: 
+                        typeof primitives[number] | "Map"
+                        | "Set"
+                        | "Date" = getTypeName(type).replace("Zod", "")
                 try {
                     if(typeName == "Map") {
                         value = new Map(value)

@@ -442,7 +442,9 @@ function validation(node) {
                     setPath(truePath, existingValue, data);
                 }
                 const value2 = existingValue ?? input[0].valueAsDate ?? new Date(input[0].value);
-                input.val(value2);
+                input.each((_, i) => {
+                    i.valueAsDate = value2;
+                });
                 setPath(truePath, value2, data);
                 return;
             }

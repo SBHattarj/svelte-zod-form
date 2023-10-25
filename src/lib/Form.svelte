@@ -660,9 +660,12 @@
                         input.val(existingValue)
                         setPath(truePath, existingValue, data)
                     }
-                    const value = existingValue ?? input[0].valueAsDate 
+                    const value = existingValue 
+                        ?? input[0].valueAsDate 
                         ?? new Date(input[0].value)
-                    input.val(value)
+                    input.each((_, i) => {
+                        i.valueAsDate = value
+                    })
 
                     setPath(truePath, value, data)
                     return
