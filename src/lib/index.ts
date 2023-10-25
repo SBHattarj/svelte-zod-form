@@ -270,10 +270,10 @@ function entriesToNestedObject(entries: Iterable<[any, any]>, schema?: z.ZodSche
 
 export const IntlDateTimeFormatter = Intl.DateTimeFormat("en-US", {
     year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
     hourCycle: "h24",
 })
 export const DateTimeFormatRegex = /([0-9]+)\/([0-9]+)\/([0-9]+),\s([0-9]+):([0-9]+)/
