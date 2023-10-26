@@ -116,7 +116,7 @@ async function sanitizeData(data) {
     }
 }
 function getTypeName(type) {
-    if ("innerType" in type._def.innerType) {
+    if ("innerType" in type._def) {
         return type._def.innerType._def.typeName;
     }
     return type._def.typeName;

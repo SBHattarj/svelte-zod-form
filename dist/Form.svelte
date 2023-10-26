@@ -86,8 +86,15 @@ export function createValuesProxy(data, schema) {
     return new Proxy(data, {
         get(target, key) {
             if (schema instanceof z.ZodObject) {
-                if (schema._def.shape()[key] instanceof z.ZodObject) {
-                    return target[key] ?? createValuesProxy(target, schema._def.shape()[key]);
+                const keySchema = schema._def.shape()[key];
+                if (keySchema instanceof z.ZodObject) {
+                    return target[key] ?? createValuesProxy(target, keySchema);
+                }
+                if (keySchema instanceof z.ZodOptional) {
+                    const innerType = keySchema._def.innerType;
+                    if (innerType instanceof z.ZodObject) {
+                        return target[key] ?? createValuesProxy(target, innerType);
+                    }
                 }
             }
             return target[key] ?? "";
