@@ -40,7 +40,42 @@
         return `[name="${truePath}"]`
     }
 
+    export function deletePath(pathGiven: readonly string[], data: Record<string, any>) {
+        
+        const path = [...pathGiven]
+        let currentObj = data
+        const name = path.pop()
+        const toDelete = new Map<object, string>()
+
+        for(let key of path) {
+            if(currentObj[key] == null) {
+                delete currentObj[key]
+                for(let [obj, key] of toDelete) {
+                    delete (obj as any)[key]
+                }
+                return
+            }
+            if(Object.keys(currentObj[key]).length <= 1) {
+                toDelete.set(currentObj, key)
+            } 
+            else {
+                toDelete.clear()
+            }
+            currentObj = currentObj[key]
+        }
+
+        delete (currentObj as any)[name!]
+        for(let [obj, key] of toDelete) {
+            delete (obj as any)[key]
+        }
+        return data
+    }
+
     export function setPath(pathGiven: readonly string[], value: any, data: Record<string, any>) {
+        if(value == null) {
+            deletePath(pathGiven, data)
+            return data
+        }
         const path = [...pathGiven]
         let currentObj = data
         const name = path.pop()
@@ -145,12 +180,12 @@
                 if(schema instanceof z.ZodObject) {
                     const keySchema = schema._def.shape()[key]
                     if(keySchema instanceof z.ZodObject) {
-                        return target[key] ?? createValuesProxy(target[key], keySchema)
+                        return createValuesProxy(target[key] ?? {}, keySchema)
                     }
                     if(keySchema instanceof z.ZodOptional) {
                         const innerType = keySchema._def.innerType
                         if(innerType instanceof z.ZodObject) {
-                            return target[key] ?? createValuesProxy(target[key], innerType)
+                            return createValuesProxy(target[key] ?? {}, innerType)
                         }
                     }
                 }
@@ -453,11 +488,9 @@
                 const [ inputValue, eventReturn ] = getInputValue(input[0])
 
                 if(!eventReturn) e.preventDefault()
-
-                setPath(truePath, inputValue, data)
+                data = setPath(truePath, inputValue, data)
                 setPath(truePath, input, Jinputs)
 
-                data = data
                 if(realTime) {
                     let result = inputSchema.safeParse(getPath(truePath, data))
 
@@ -616,21 +649,18 @@
                         return `${acc}, [value="${value}"]`
                     }, "")
                     input.filter(existingValueSelector).prop("checked", true)
-                    setPath(truePath, existingValue, data)
-                    data = data
+                    data = setPath(truePath, existingValue, data)
                     return
                 } 
                 const value = input.filter(":checked").map((_, checkbox) => {
                     return checkbox.value
                 })
-                setPath(truePath, value, data)
-                data = data
+                data = setPath(truePath, value, data)
                 return
             }
             if(input.attr("type") === "radio") {
                 const value = existingValue ?? input.filter(":checked").val()
-                setPath(truePath, value, data)
-                data = data
+                data = setPath(truePath, value, data)
                 return
             }
             if(input.attr("type") === "file") {
@@ -655,12 +685,10 @@
                     i.files = container.files
                 })
                 if(!input[0].multiple) {
-                    setPath(truePath, value[0], data)
-                    data = data
+                    data = setPath(truePath, value[0], data)
                     return
                 }
-                setPath(truePath, value, data)
-                data = data
+                data = setPath(truePath, value, data)
                 return
             }
             if(input.length > 0) {
@@ -670,21 +698,18 @@
                         setPath(truePath, undefined, data)
                         return
                     }
-                    setPath(truePath, value, data)
-                    data = data
+                    data = setPath(truePath, value, data)
                     return
                 }
                 if(input[0].value === "") {
-                    if(existingValue != null) input.attr("value", existingValue)
-                    setPath(truePath, existingValue, data)
-                    data = data
+                    if(existingValue != null) input.attr("value", existingValue ?? "")
+                    data = setPath(truePath, existingValue, data)
                     return
                 }
                 if(input.attr("type")?.startsWith("date")) {
                     if(isNaN(input[0].valueAsNumber)) {
-                        input.val(existingValue)
-                        setPath(truePath, existingValue, data)
-                        data = data
+                        input.val(existingValue ?? "")
+                        data = setPath(truePath, existingValue, data)
                         return
                     }
                     const value = existingValue 
@@ -694,17 +719,15 @@
                         i.valueAsDate = value
                     })
 
-                    setPath(truePath, value, data)
-                    data = data
+                    data = setPath(truePath, value, data)
                     return
                 }
 
                 const value = existingValue ?? input[0].valueAsDate 
                     ?? input[0].value
-                input.val(value)
+                input.val(value ?? "")
 
-                setPath(truePath, value, data)
-                data = data
+                data = setPath(truePath, value, data)
                 return
             }
 
@@ -772,7 +795,7 @@
                 }
                 (JinputNew as JQuery<HTMLInputElement>)[0].valueAsDate = value
             } else {
-                JinputNew.val(value as any)
+                JinputNew.val(value as any ?? "")
             }
         }
     })(Jinputs)
