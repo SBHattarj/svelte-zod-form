@@ -14,6 +14,8 @@
     }
     $: console.log("errors", errors)
     $: console.log("form", form)
+    let data: any;
+    $: console.log(data)
 </script>
 <h1>Welcome to your library project</h1>
 <p>Create your package using @sveltejs/package and preview/showcase your work with SvelteKit</p>
@@ -29,6 +31,7 @@
         file: z.instanceof(File)
     })}
     allErrors={form?.errors ?? []}
+    bind:data
     let:validation
     let:formInput
     let:errors

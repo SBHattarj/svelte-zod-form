@@ -207,6 +207,7 @@ function validation(node) {
                 ...result
             }
         }));
+        data = data;
         if (!doDefault)
             e.preventDefault();
         if (!result.success) {
@@ -295,6 +296,7 @@ function validation(node) {
                 e.preventDefault();
             setPath(truePath, inputValue, data);
             setPath(truePath, input2, Jinputs);
+            data = data;
             if (realTime) {
                 let result = inputSchema.safeParse(getPath(truePath, data));
                 if (!result.success) {
@@ -386,17 +388,20 @@ function validation(node) {
                 }, "");
                 input.filter(existingValueSelector).prop("checked", true);
                 setPath(truePath, existingValue, data);
+                data = data;
                 return;
             }
             const value = input.filter(":checked").map((_, checkbox) => {
                 return checkbox.value;
             });
             setPath(truePath, value, data);
+            data = data;
             return;
         }
         if (input.attr("type") === "radio") {
             const value = existingValue ?? input.filter(":checked").val();
             setPath(truePath, value, data);
+            data = data;
             return;
         }
         if (input.attr("type") === "file") {
@@ -422,9 +427,11 @@ function validation(node) {
             });
             if (!input[0].multiple) {
                 setPath(truePath, value[0], data);
+                data = data;
                 return;
             }
             setPath(truePath, value, data);
+            data = data;
             return;
         }
         if (input.length > 0) {
@@ -435,29 +442,35 @@ function validation(node) {
                     return;
                 }
                 setPath(truePath, value2, data);
+                data = data;
                 return;
             }
             if (input[0].value === "") {
                 if (existingValue != null)
                     input.attr("value", existingValue);
                 setPath(truePath, existingValue, data);
+                data = data;
                 return;
             }
             if (input.attr("type")?.startsWith("date")) {
                 if (isNaN(input[0].valueAsNumber)) {
                     input.val(existingValue);
                     setPath(truePath, existingValue, data);
+                    data = data;
+                    return;
                 }
                 const value2 = existingValue ?? input[0].valueAsDate ?? new Date(input[0].value);
                 input.each((_, i) => {
                     i.valueAsDate = value2;
                 });
                 setPath(truePath, value2, data);
+                data = data;
                 return;
             }
             const value = existingValue ?? input[0].valueAsDate ?? input[0].value;
             input.val(value);
             setPath(truePath, value, data);
+            data = data;
             return;
         }
     });
