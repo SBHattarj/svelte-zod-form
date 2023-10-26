@@ -11,12 +11,12 @@ export declare const All: unique symbol;
 export declare const HasErrors: unique symbol;
 export declare const HasErrorsWithin: unique symbol;
 export type namesType<T> = {
-    [key in keyof T]: (T[key] extends number | string | boolean ? {} : namesType<T[key]>) & {
+    [key in keyof Required<T>]: (Required<T>[key] extends number | string | boolean ? {} : namesType<Required<T>[key]>) & {
         [Value]: string;
     };
 };
 export type errorsType<T> = (T extends number | string | boolean ? {} : {
-    [key in keyof T]: errorsType<T[key]>;
+    [key in keyof Required<T>]: errorsType<Required<T>[key]>;
 }) & {
     [Path]: string[];
     [Errors]: Set<string>;

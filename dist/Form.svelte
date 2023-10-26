@@ -33,9 +33,17 @@ export function loopOverZodObject(object, cb = () => {
 }, path = []) {
     const shape = object._def.shape();
     for (const [name, value] of Object.entries(shape)) {
-        if (value._def?.shape) {
-            loopOverZodObject(value, cb, [...path, name]);
+        const truePath = [...path, name];
+        if (value instanceof z.ZodObject) {
+            loopOverZodObject(value, cb, truePath);
             continue;
+        }
+        if (value instanceof z.ZodOptional) {
+            const innerType = value._def.innerType;
+            if (innerType instanceof z.ZodObject) {
+                loopOverZodObject(innerType, cb, truePath);
+                continue;
+            }
         }
         cb(name, value, path);
     }
@@ -88,12 +96,12 @@ export function createValuesProxy(data, schema) {
             if (schema instanceof z.ZodObject) {
                 const keySchema = schema._def.shape()[key];
                 if (keySchema instanceof z.ZodObject) {
-                    return target[key] ?? createValuesProxy(target, keySchema);
+                    return target[key] ?? createValuesProxy(target[key], keySchema);
                 }
                 if (keySchema instanceof z.ZodOptional) {
                     const innerType = keySchema._def.innerType;
                     if (innerType instanceof z.ZodObject) {
-                        return target[key] ?? createValuesProxy(target, innerType);
+                        return target[key] ?? createValuesProxy(target[key], innerType);
                     }
                 }
             }

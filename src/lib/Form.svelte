@@ -145,12 +145,12 @@
                 if(schema instanceof z.ZodObject) {
                     const keySchema = schema._def.shape()[key]
                     if(keySchema instanceof z.ZodObject) {
-                        return target[key] ?? createValuesProxy(target, keySchema)
+                        return target[key] ?? createValuesProxy(target[key], keySchema)
                     }
                     if(keySchema instanceof z.ZodOptional) {
                         const innerType = keySchema._def.innerType
                         if(innerType instanceof z.ZodObject) {
-                            return target[key] ?? createValuesProxy(target, innerType)
+                            return target[key] ?? createValuesProxy(target[key], innerType)
                         }
                     }
                 }
