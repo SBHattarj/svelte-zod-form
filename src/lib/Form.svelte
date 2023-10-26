@@ -12,7 +12,6 @@
     } from './Form';
 
 
-
     export const Value = Symbol("Value")
     export const Errors = Symbol("Errors")
     export const Path = Symbol("Path")
@@ -21,11 +20,13 @@
     export const HasErrorsWithin = Symbol("HasErrorsWithin")
 
     export type namesType<T> = {
-        [key in keyof T]: (T[key] extends number | string | boolean ? {} : namesType<T[key]>) & { [Value]: string }
+        [key in keyof Required<T>]: (
+            Required<T>[key] extends number | string | boolean ? {} : namesType<Required<T>[key]>
+        ) & { [Value]: string }
     }
 
     export type errorsType<T> = (T extends number | string | boolean ? {} : {
-        [key in keyof T]: errorsType<T[key]>
+        [key in keyof Required<T>]: errorsType<Required<T>[key]>
     }) & {
         [Path]: string[],
         [Errors]: Set<string>,
@@ -70,9 +71,17 @@
         const shape = object._def.shape()
 
         for(const [name, value] of Object.entries(shape)) {
-            if(value._def?.shape) {
-                loopOverZodObject(value as ZodObject<ZodRawShape>, cb, [...path, name])
+            const truePath = [...path, name]
+            if(value instanceof z.ZodObject) {
+                loopOverZodObject(value, cb, truePath)
                 continue
+            }
+            if(value instanceof z.ZodOptional) {
+                const innerType = value._def.innerType
+                if(innerType instanceof z.ZodObject) {
+                    loopOverZodObject(innerType, cb, truePath)
+                    continue
+                }
             }
             cb(name, value, path)
         }
