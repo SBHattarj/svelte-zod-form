@@ -72,7 +72,6 @@
     }
 
     export function setPath(pathGiven: readonly string[], value: any, data: Record<string, any>) {
-        console.log("path given", pathGiven)
         if(value == null) {
             deletePath(pathGiven, data)
             return data
@@ -192,7 +191,6 @@
                     if(keySchema instanceof z.ZodOptional) {
                         const innerType = keySchema._def.innerType
                         if(innerType instanceof z.ZodObject) {
-                            console.log(target[key])
                             return createValuesProxy(target[key] ?? {}, innerType)
                         }
                     }
@@ -497,16 +495,13 @@
                 const [ inputValue, eventReturn ] = getInputValue(input[0])
 
                 if(!eventReturn) e.preventDefault()
-                console.log("inputevent", truePath)
                 data = setPath(truePath, inputValue, data)
                 setPath(truePath, input, Jinputs)
 
                 if(realTime) {
-                    console.log(path.slice(0, lastOptional))
                     let result = (lastOptional < path.length || getPath([...path].slice(0, lastOptional), data) != null)
                         ? inputSchema.safeParse(getPath(truePath, data))
                         : inputSchema.optional().safeParse(getPath(truePath, data))
-                    console.log("inputevent2", truePath)
 
                     if(!result.success) {
                         result.error.issues = result
@@ -527,7 +522,6 @@
                     )
 
                     if(!doDefault) e.preventDefault()
-                    console.log("inputevent3", truePath)
 
                     if(!result.success) {
                         e.preventDefault()
@@ -567,7 +561,6 @@
                                 allErrors
                             )
                         })
-                        console.log("last", truePath)
                         return
                     }
 
@@ -582,7 +575,6 @@
                     error.errors.length = 0
                 })
                 allErrors = allErrors
-                console.log("last", truePath)
             })
 
             Jnode.on("blur", inputSelector, (e) => {

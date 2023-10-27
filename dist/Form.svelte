@@ -38,7 +38,6 @@ export function deletePath(pathGiven, data) {
     return data;
 }
 export function setPath(pathGiven, value, data) {
-    console.log("path given", pathGiven);
     if (value == null) {
         deletePath(pathGiven, data);
         return data;
@@ -133,7 +132,6 @@ export function createValuesProxy(data, schema) {
                 if (keySchema instanceof z.ZodOptional) {
                     const innerType = keySchema._def.innerType;
                     if (innerType instanceof z.ZodObject) {
-                        console.log(target[key]);
                         return createValuesProxy(target[key] ?? {}, innerType);
                     }
                 }
@@ -336,13 +334,10 @@ function validation(node) {
             const [inputValue, eventReturn] = getInputValue(input2[0]);
             if (!eventReturn)
                 e.preventDefault();
-            console.log("inputevent", truePath);
             data = setPath(truePath, inputValue, data);
             setPath(truePath, input2, Jinputs);
             if (realTime) {
-                console.log(path.slice(0, lastOptional));
                 let result = lastOptional < path.length || getPath([...path].slice(0, lastOptional), data) != null ? inputSchema.safeParse(getPath(truePath, data)) : inputSchema.optional().safeParse(getPath(truePath, data));
-                console.log("inputevent2", truePath);
                 if (!result.success) {
                     result.error.issues = result.error.issues.map((issue) => ({ ...issue, path: [...truePath] }));
                 }
@@ -353,7 +348,6 @@ function validation(node) {
                 });
                 if (!doDefault)
                     e.preventDefault();
-                console.log("inputevent3", truePath);
                 if (!result.success) {
                     e.preventDefault();
                     const errorSet = result.error.issues.reduce((issueSet, issue) => {
@@ -372,7 +366,6 @@ function validation(node) {
                     errorSet.forEach(({ path: path2, issues, name: name2 }) => {
                         allErrors = throwError(name2, path2, new z.ZodError(issues), Jnode, allErrors);
                     });
-                    console.log("last", truePath);
                     return;
                 }
                 allErrors.forEach((error) => {
@@ -386,7 +379,6 @@ function validation(node) {
                 error.errors.length = 0;
             });
             allErrors = allErrors;
-            console.log("last", truePath);
         });
         Jnode.on("blur", inputSelector, (e) => {
             if (!e.target.isConnected) {
