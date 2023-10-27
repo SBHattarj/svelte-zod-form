@@ -38,6 +38,7 @@ export function deletePath(pathGiven, data) {
     return data;
 }
 export function setPath(pathGiven, value, data) {
+    console.log("path given", pathGiven);
     if (value == null) {
         deletePath(pathGiven, data);
         return data;
@@ -61,12 +62,12 @@ export function getPath(path, data) {
     return currentObj;
 }
 export function loopOverZodObject(object, cb = () => {
-}, path = []) {
+}, path = [], lastOptional = 0) {
     const shape = object._def.shape();
     for (const [name, value] of Object.entries(shape)) {
         const truePath = [...path, name];
         if (value instanceof z.ZodObject) {
-            loopOverZodObject(value, cb, truePath);
+            loopOverZodObject(value, cb, truePath, lastOptional + 1);
             continue;
         }
         if (value instanceof z.ZodOptional) {
@@ -76,7 +77,7 @@ export function loopOverZodObject(object, cb = () => {
                 continue;
             }
         }
-        cb(name, value, path);
+        cb(name, value, path, path.length - lastOptional);
     }
 }
 export function createNamesProxy(name) {
@@ -132,6 +133,7 @@ export function createValuesProxy(data, schema) {
                 if (keySchema instanceof z.ZodOptional) {
                     const innerType = keySchema._def.innerType;
                     if (innerType instanceof z.ZodObject) {
+                        console.log(target[key]);
                         return createValuesProxy(target[key] ?? {}, innerType);
                     }
                 }
@@ -266,6 +268,7 @@ function validation(node) {
                 issueSet[issueIndex].issues.push(issue);
                 return issueSet;
             }, []);
+            allErrors.length = 0;
             errorSet.forEach(({ path, issues, name }) => {
                 allErrors = throwError(name, path, new z.ZodError(issues), Jnode, allErrors);
             });
@@ -319,7 +322,7 @@ function validation(node) {
         }));
         return [inputValue, eventReturn];
     }
-    loopOverZodObject(schema, (name, inputSchema, path) => {
+    loopOverZodObject(schema, (name, inputSchema, path, lastOptional) => {
         const inputSelector = restrictPath(path, name);
         const truePath = [...path, name];
         const truePathStr = truePath.join(".");
@@ -333,12 +336,15 @@ function validation(node) {
             const [inputValue, eventReturn] = getInputValue(input2[0]);
             if (!eventReturn)
                 e.preventDefault();
+            console.log("inputevent", truePath);
             data = setPath(truePath, inputValue, data);
             setPath(truePath, input2, Jinputs);
             if (realTime) {
-                let result = inputSchema.safeParse(getPath(truePath, data));
+                console.log(path.slice(0, lastOptional));
+                let result = lastOptional < path.length || getPath([...path].slice(0, lastOptional), data) != null ? inputSchema.safeParse(getPath(truePath, data)) : inputSchema.optional().safeParse(getPath(truePath, data));
+                console.log("inputevent2", truePath);
                 if (!result.success) {
-                    result.error.issues = result.error.issues.map((issue) => ({ ...issue, path: truePath }));
+                    result.error.issues = result.error.issues.map((issue) => ({ ...issue, path: [...truePath] }));
                 }
                 const doDefault = dispatchValidateValue(e.target, result, inputSchema, data, {
                     value: getPath(truePath, data),
@@ -347,6 +353,7 @@ function validation(node) {
                 });
                 if (!doDefault)
                     e.preventDefault();
+                console.log("inputevent3", truePath);
                 if (!result.success) {
                     e.preventDefault();
                     const errorSet = result.error.issues.reduce((issueSet, issue) => {
@@ -365,6 +372,7 @@ function validation(node) {
                     errorSet.forEach(({ path: path2, issues, name: name2 }) => {
                         allErrors = throwError(name2, path2, new z.ZodError(issues), Jnode, allErrors);
                     });
+                    console.log("last", truePath);
                     return;
                 }
                 allErrors.forEach((error) => {
@@ -378,12 +386,13 @@ function validation(node) {
                 error.errors.length = 0;
             });
             allErrors = allErrors;
+            console.log("last", truePath);
         });
         Jnode.on("blur", inputSelector, (e) => {
             if (!e.target.isConnected) {
                 return;
             }
-            let result = inputSchema.safeParse(getPath(truePath, data));
+            let result = path.length < lastOptional || getPath([...path].slice(0, lastOptional), data) != null ? inputSchema.safeParse(getPath(truePath, data)) : inputSchema.optional().safeParse(getPath(truePath, data));
             const input2 = Jnode.find(inputSelector);
             setPath(truePath, input2, Jinputs);
             if (!result.success) {

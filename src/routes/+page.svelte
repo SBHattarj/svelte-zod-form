@@ -1,6 +1,6 @@
 <script lang="ts">
     import Form, { Value } from "$lib";
-    import z from "zod";
+    import z, { optional } from "zod";
     let error = new z.ZodError([{
         path: ["b"],
         code: "custom",
@@ -21,12 +21,14 @@
 <p>Create your package using @sveltejs/package and preview/showcase your work with SvelteKit</p>
 <p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation</p>
 <Form 
+    realTime
     let:names 
     schema={z.object({
         a: z.string(),
         b: z.object({
-            c: z.number()
-        }),
+            c: z.number(),
+            d: z.string()
+        }).optional(),
         c: z.string(),
         file: z.instanceof(File)
     })}
@@ -51,8 +53,19 @@
             </FormError>
         </div>
         <div>
-            b.c<input type="number" name={names.b.c[Value]} use:formInput value={values.b.c}>
+            b.c<input type="number" name={names.b.c[Value]} use:formInput value={values.b?.c}>
             <FormError errors={errors.b.c} let:errors let:path>
+                <h2>Errors</h2>
+                <ul>
+                    {#each errors as error}
+                        <li>{error}</li>
+                    {/each}
+                </ul>
+            </FormError>
+        </div>
+        <div>
+            b.d<input type="number" name={names.b.d[Value]} use:formInput value={values.b?.d}>
+            <FormError errors={errors.b.d} let:errors let:path>
                 <h2>Errors</h2>
                 <ul>
                     {#each errors as error}

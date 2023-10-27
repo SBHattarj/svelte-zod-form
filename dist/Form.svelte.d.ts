@@ -28,7 +28,7 @@ export declare function restrictPath(path: readonly (string | number)[], name: s
 export declare function deletePath(pathGiven: readonly string[], data: Record<string, any>): Record<string, any> | undefined;
 export declare function setPath(pathGiven: readonly string[], value: any, data: Record<string, any>): Record<string, any>;
 export declare function getPath(path: readonly (string | number)[], data: Record<string, any>): any;
-export declare function loopOverZodObject<T extends ZodObject<ZodRawShape>>(object: T, cb?: (name: string, value: Readonly<ZodTypeAny>, path: readonly string[]) => void, path?: string[]): void;
+export declare function loopOverZodObject<T extends ZodObject<ZodRawShape>>(object: T, cb?: (name: string, value: Readonly<ZodTypeAny>, path: readonly string[], OptionalIndex: number) => void, path?: string[], lastOptional?: number): void;
 export declare function createNamesProxy<T extends ZodObject<ZodRawShape>>(name: string): namesType<z.infer<T>>;
 export declare function createErrorProxy<T extends ZodObject<ZodRawShape>>(path: string, errors: FormError[]): errorsType<z.infer<T>>;
 export declare function createValuesProxy<T extends Record<any, any>>(data: T, schema: z.ZodSchema): T;
